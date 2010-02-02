@@ -57,7 +57,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 }
             }
             if (raw) {
-                copyResponse(ctx, request, response);
+                copyResponse(ctx, response);
             } else {
                 Invoker.invoke(new NettyInvocation(request, response, ctx));
             }
@@ -125,7 +125,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         @Override
         public void execute() throws Exception {
             ActionInvoker.invoke(request, response);
-            copyResponse(ctx, request, response);
+            copyResponse(ctx, response);
         }
     }
 
@@ -159,22 +159,26 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         if (!response.headers.containsKey("cache-control") && !response.headers.containsKey("Cache-Control")) {
             nettyResponse.setHeader("Cache-Control", "no-cache");
         }
-                
+
     }
+
+    public final static Object lock = new Object();
 
     protected static void writeResponse(ChannelHandlerContext ctx, Response response, HttpResponse nettyResponse) {
         ChannelBuffer buf = ChannelBuffers.copiedBuffer(response.out.toByteArray());
         nettyResponse.setContent(buf);
 
-        ChannelFuture f = ctx.getChannel().write(nettyResponse);
-        f.addListener(ChannelFutureListener.CLOSE);
+        synchronized (lock) {
+            ChannelFuture f = ctx.getChannel().write(nettyResponse);
+            f.addListener(ChannelFutureListener.CLOSE);
+        }
     }
 
-    public static void copyResponse(ChannelHandlerContext ctx, Request request, Response response) throws Exception {
+    public static void copyResponse(ChannelHandlerContext ctx, Response response) throws Exception {
         response.out.flush();
         HttpResponse nettyResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(response.status));
         nettyResponse.setHeader("Server", signature);
-                            
+
         if (response.contentType != null) {
             nettyResponse.setHeader("Content-Type", response.contentType + (response.contentType.startsWith("text/") && !response.contentType.contains("charset") ? "; charset=utf-8" : ""));
         } else {
@@ -191,11 +195,14 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
 
                 nettyResponse.setHeader("Content-Type", MimeTypes.getContentType(response.direct.getName()));
 
-                ctx.getChannel().write(nettyResponse);
+                synchronized (lock) {
 
-                ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedNioFile(response.direct));
+                    ctx.getChannel().write(nettyResponse);
 
-                writeFuture.addListener(ChannelFutureListener.CLOSE);
+                    ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedNioFile(response.direct));
+
+                    writeFuture.addListener(ChannelFutureListener.CLOSE);
+                }
 
             } catch (Exception e) {
                 e.printStackTrace();
@@ -318,7 +325,8 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         try {
             ChannelBuffer buf = ChannelBuffers.copiedBuffer(errorHtml.getBytes("utf-8"));
             nettyResponse.setContent(buf);
-            ctx.getChannel().write(nettyResponse);
+            ChannelFuture writeFuture = ctx.getChannel().write(nettyResponse);
+            writeFuture.addListener(ChannelFutureListener.CLOSE);
         } catch (UnsupportedEncodingException fex) {
             Logger.error(fex, "(utf-8 ?)");
         }
@@ -346,7 +354,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
 
         HttpResponse nettyResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.INTERNAL_SERVER_ERROR);
         nettyResponse.setHeader("Server", signature);
-               
+
         Request request = Request.current();
         Response response = Response.current();
 
@@ -391,7 +399,10 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
 
                 ChannelBuffer buf = ChannelBuffers.copiedBuffer(errorHtml.getBytes("utf-8"));
                 nettyResponse.setContent(buf);
-                ctx.getChannel().write(nettyResponse);
+                //synchronized (lock) {
+                    ChannelFuture writeFuture = ctx.getChannel().write(nettyResponse);
+                    writeFuture.addListener(ChannelFutureListener.CLOSE);
+                //}
                 Logger.error(e, "Internal Server Error (500) for request %s", request.method + " " + request.url);
             } catch (Throwable ex) {
                 Logger.error(e, "Internal Server Error (500) for request %s", request.method + " " + request.url);
@@ -399,7 +410,10 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 try {
                     ChannelBuffer buf = ChannelBuffers.copiedBuffer("Internal Error (check logs)".getBytes("utf-8"));
                     nettyResponse.setContent(buf);
-                    ctx.getChannel().write(nettyResponse);
+                    synchronized (lock) {
+                        ChannelFuture writeFuture = ctx.getChannel().write(nettyResponse);
+                        writeFuture.addListener(ChannelFutureListener.CLOSE);
+                    }
                 } catch (UnsupportedEncodingException fex) {
                     Logger.error(fex, "(utf-8 ?)");
                 }
@@ -408,7 +422,10 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
             try {
                 ChannelBuffer buf = ChannelBuffers.copiedBuffer("Internal Error (check logs)".getBytes("utf-8"));
                 nettyResponse.setContent(buf);
-                ctx.getChannel().write(nettyResponse);
+                synchronized (lock) {
+                    ChannelFuture writeFuture = ctx.getChannel().write(nettyResponse);
+                    writeFuture.addListener(ChannelFutureListener.CLOSE);
+                }
             } catch (Exception fex) {
                 Logger.error(fex, "(utf-8 ?)");
             }
@@ -441,7 +458,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                     }
                 }
                 if (raw) {
-                    copyResponse(ctx, request, response);
+                    copyResponse(ctx, response);
                 } else {
                     if (Play.mode == Play.Mode.DEV) {
                         nettyResponse.setHeader("Cache-Control", "no-cache");
@@ -471,11 +488,14 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                         nettyResponse.setHeader("Content-Type", MimeTypes.getContentType(file.getName()));
                         nettyResponse.setHeader("Content-Length", "" + file.length());
 
-                        ctx.getChannel().write(nettyResponse);
-
-                        ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedNioFile(file.getRealFile()));
-
-                        writeFuture.addListener(ChannelFutureListener.CLOSE);
+                        //synchronized (lock) {
+                            ChannelFuture future = ctx.getChannel().write(nettyResponse);
+                            future.addListener(ChannelFutureListener.CLOSE);
+                        //}
+                        //synchronized (lock) {
+                            ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedNioFile(file.getRealFile()));
+                            writeFuture.addListener(ChannelFutureListener.CLOSE);
+                        //}
                     }
                 }
 
@@ -485,7 +505,10 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
             try {
                 ChannelBuffer buf = ChannelBuffers.copiedBuffer("Internal Error (check logs)".getBytes("utf-8"));
                 nettyResponse.setContent(buf);
-                ctx.getChannel().write(nettyResponse);
+                //synchronized (lock) {
+                    ChannelFuture future = ctx.getChannel().write(nettyResponse);
+                    future.addListener(ChannelFutureListener.CLOSE);
+                //}
             } catch (Exception ex) {
                 Logger.error(e, "serveStatic for request %s", request.method + " " + request.url);
             }
@@ -502,7 +525,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         }
 
         if (request.headers.containsKey("If-Modified-Since")) {
-            final String ifModifiedSince = request.headers.get("If-Modified-Since").value() ;
+            final String ifModifiedSince = request.headers.get("If-Modified-Since").value();
 
             if (!StringUtils.isEmpty(ifModifiedSince)) {
                 try {
