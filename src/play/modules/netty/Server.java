@@ -36,17 +36,12 @@ public class Server {
         }
 
         // Setup the http server for netty
-        ServerBootstrap bootstrap = null;
-        if (Play.mode != Mode.DEV) {
-            bootstrap = new ServerBootstrap(new NioServerSocketChannelFactory(
+        ServerBootstrap bootstrap = new ServerBootstrap(new NioServerSocketChannelFactory(
                     Executors.newCachedThreadPool(), Executors.newCachedThreadPool()));
-        } else {
-            bootstrap = new ServerBootstrap(new NioServerSocketChannelFactory(
-                    Executors.newCachedThreadPool(), Executors.newCachedThreadPool(), 1));
-        }
 
         bootstrap.setPipelineFactory(new HttpServerPipelineFactory());
-        bootstrap.bind(new InetSocketAddress(address, httpPort)) ;
+        bootstrap.bind(new InetSocketAddress(address, httpPort));
+
         try {
             if (Play.mode == Mode.DEV) {
                 if (address == null) {
