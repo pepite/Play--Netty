@@ -9,6 +9,7 @@ import play.Play.Mode;
 
 import java.io.File;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.util.Properties;
 import java.util.concurrent.Executors;
 
@@ -16,7 +17,6 @@ public class Server {
 
 
     public Server() {
-        
         final Properties p = Play.configuration;
         int httpPort = Integer.parseInt(p.getProperty("http.port", "9000"));
         InetAddress address = null;
@@ -34,7 +34,7 @@ public class Server {
             Logger.error(e, "Could not understand http.address");
             System.exit(-1);
         }
-        
+
         // Setup the http server for netty
         ServerBootstrap bootstrap = null;
         if (Play.mode != Mode.DEV) {
@@ -46,7 +46,7 @@ public class Server {
         }
 
         bootstrap.setPipelineFactory(new HttpServerPipelineFactory());
-
+        bootstrap.bind(new InetSocketAddress(address, httpPort)) ;
         try {
             if (Play.mode == Mode.DEV) {
                 if (address == null) {
