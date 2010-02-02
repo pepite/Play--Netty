@@ -93,9 +93,11 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 super.init();
             }
             if (Play.mode == Play.Mode.PROD && staticPathsCache.containsKey(request.path)) {
+                RenderStatic rs = null;
                 synchronized (staticPathsCache) {
-                    serveStatic(staticPathsCache.get(request.path), ctx, request, response, nettyRequest);
+                    rs = staticPathsCache.get(request.path);
                 }
+                serveStatic(rs, ctx, request, response, nettyRequest);
                 return false;
             }
             try {
@@ -198,7 +200,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
 
                 nettyResponse.setHeader("Content-Type", MimeTypes.getContentType(response.direct.getName()));
 
-                ChannelFuture future = ctx.getChannel().write(nettyResponse);
+                ctx.getChannel().write(nettyResponse);
                 ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedNioFile(response.direct));
                 if (nettyRequest.isKeepAlive())
                     writeFuture.addListener(ChannelFutureListener.CLOSE);
