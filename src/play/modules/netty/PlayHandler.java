@@ -1,12 +1,18 @@
 package play.modules.netty;
 
-import org.apache.asyncweb.common.HttpHeaderConstants;
 import org.apache.commons.lang.StringUtils;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBufferInputStream;
 import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.channel.*;
 import org.jboss.netty.handler.codec.http.*;
+import org.jboss.netty.handler.codec.http.Cookie;
+import org.jboss.netty.handler.codec.http.DefaultCookie;
+import org.jboss.netty.handler.codec.http.DefaultHttpResponse;
+import org.jboss.netty.handler.codec.http.HttpRequest;
+import org.jboss.netty.handler.codec.http.HttpResponse;
+import org.jboss.netty.handler.codec.http.HttpResponseStatus;
+import org.jboss.netty.handler.codec.http.HttpVersion;
 import org.jboss.netty.handler.stream.ChunkedNioFile;
 import play.Invoker;
 import play.Logger;
@@ -27,8 +33,7 @@ import play.templates.TemplateLoader;
 import play.utils.Utils;
 import play.vfs.VirtualFile;
 
-import java.io.ByteArrayOutputStream;
-import java.io.UnsupportedEncodingException;
+import java.io.*;
 import java.net.URI;
 import java.text.ParseException;
 import java.util.*;
@@ -57,7 +62,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 }
             }
             if (raw) {
-                copyResponse(ctx, response, nettyRequest);
+                copyResponse(ctx, request, response, nettyRequest);
             } else {
                 Invoker.invoke(new NettyInvocation(request, response, ctx, nettyRequest));
             }
@@ -130,7 +135,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         @Override
         public void execute() throws Exception {
             ActionInvoker.invoke(request, response);
-            copyResponse(ctx, response, nettyRequest);
+            copyResponse(ctx, request, response, nettyRequest);
         }
     }
 
@@ -168,17 +173,17 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
 
     protected static void writeResponse(ChannelHandlerContext ctx, Response response, HttpResponse nettyResponse, HttpRequest nettyRequest) {
         ChannelBuffer buf = ChannelBuffers.copiedBuffer(response.out.toByteArray());
-        
+
         nettyResponse.setContent(buf);
 
         ChannelFuture f = ctx.getChannel().write(nettyResponse);
-        if (nettyRequest.isKeepAlive())              {
+        if (nettyRequest.isKeepAlive()) {
             f.addListener(ChannelFutureListener.CLOSE);
         }
-        
+
     }
 
-    public static void copyResponse(ChannelHandlerContext ctx, Response response, HttpRequest nettyRequest) throws Exception {
+    public static void copyResponse(ChannelHandlerContext ctx, Request request, Response response, HttpRequest nettyRequest) throws Exception {
         response.out.flush();
         HttpResponse nettyResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(response.status));
         nettyResponse.setHeader("Server", signature);
@@ -192,14 +197,11 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
 
         addToResponse(response, nettyResponse);
 
-        if ((response.direct != null) && response.direct.isFile()) {
-            nettyResponse.setHeader("Content-Length", "" + response.direct.length());
+        final File file = response.direct;
+        if ((file != null) && file.isFile()) {
 
             try {
-                nettyResponse.setHeader(HttpHeaderConstants.KEY_CONTENT_LENGTH, "" + response.direct.length());
-
-                nettyResponse.setHeader("Content-Type", MimeTypes.getContentType(response.direct.getName()));
-
+                addEtag(request, nettyResponse, file);
                 ctx.getChannel().write(nettyResponse);
                 ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedNioFile(response.direct));
                 if (nettyRequest.isKeepAlive())
@@ -453,41 +455,14 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                     }
                 }
                 if (raw) {
-                    copyResponse(ctx, response, nettyRequest);
+                    copyResponse(ctx, request, response, nettyRequest);
                 } else {
-                    if (Play.mode == Play.Mode.DEV) {
-                        nettyResponse.setHeader("Cache-Control", "no-cache");
-                    } else {
-                        String maxAge = Play.configuration.getProperty("http.cacheControl", "3600");
-                        if (maxAge.equals("0")) {
-                            nettyResponse.setHeader("Cache-Control", "no-cache");
-                        } else {
-                            nettyResponse.setHeader("Cache-Control", "max-age=" + maxAge);
-                        }
-                    }
-                    boolean useEtag = Play.configuration.getProperty("http.useETag", "true").equals("true");
-                    long last = file.lastModified();
-                    String etag = "\"" + last + "-" + file.hashCode() + "\"";
-                    if (!isModified(etag, last, request)) {
-                        if (useEtag) {
-                            nettyResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.NOT_MODIFIED);
-                            nettyResponse.setHeader("Etag", etag);
-                        }
-                    } else {
-                        nettyResponse.setHeader("Last-Modified", Utils.getHttpDateFormatter().format(new Date(last)));
-                        if (useEtag) {
-                            nettyResponse.setHeader("Etag", etag);
-                        }
+                    addEtag(request, nettyResponse, file.getRealFile());
 
-
-                        nettyResponse.setHeader("Content-Type", MimeTypes.getContentType(file.getName()));
-                        nettyResponse.setHeader("Content-Length", "" + file.length());
-
-                        ctx.getChannel().write(nettyResponse);
-                        ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedNioFile(file.getRealFile()));
-                        if (!nettyRequest.isKeepAlive()) {
-                            writeFuture.addListener(ChannelFutureListener.CLOSE);
-                        }
+                    ctx.getChannel().write(nettyResponse);
+                    ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedNioFile(file.getRealFile()));
+                    if (!nettyRequest.isKeepAlive()) {
+                        writeFuture.addListener(ChannelFutureListener.CLOSE);
                     }
                 }
 
@@ -532,5 +507,34 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         return true;
     }
 
+    private static void addEtag(Request request, HttpResponse minaResponse, File file) throws IOException {
+        if (Play.mode == Play.Mode.DEV) {
+            minaResponse.setHeader("Cache-Control", "no-cache");
+        } else {
+            String maxAge = Play.configuration.getProperty("http.cacheControl", "3600");
+            if (maxAge.equals("0")) {
+                minaResponse.setHeader("Cache-Control", "no-cache");
+            } else {
+                minaResponse.setHeader("Cache-Control", "max-age=" + maxAge);
+            }
+        }
+        boolean useEtag = Play.configuration.getProperty("http.useETag", "true").equals("true");
+        long last = file.lastModified();
+        final String etag = "\"" + last + "-" + file.hashCode() + "\"";
+        if (!isModified(etag, last, request)) {
+            minaResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.NOT_MODIFIED);
+            if (useEtag) {
+                minaResponse.setHeader("Etag", etag);
+            }
+
+        } else {
+            minaResponse.setHeader("Last-Modified", Utils.getHttpDateFormatter().format(new Date(last)));
+            if (useEtag) {
+                minaResponse.setHeader("Etag", etag);
+            }
+            minaResponse.setHeader("Content-Type", MimeTypes.getContentType(file.getName()));
+            minaResponse.setHeader("Content-Length", "" + file.length());
+        }
+    }
 
 }
