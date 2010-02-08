@@ -314,7 +314,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         nettyResponse.setHeader("Server", signature);
 
         nettyResponse.setHeader("Content-Type", "text/html");
-        Map<String, Object> binding = getBindingForErrors(e);
+        Map<String, Object> binding = getBindingForErrors(e, false);
 
         String format = Request.current().format;
         if (format == null || ("XMLHttpRequest".equals(request.headers.get("x-requested-with")) && "html".equals(format))) {
@@ -335,10 +335,14 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         }
     }
 
-    protected static Map<String, Object> getBindingForErrors(Exception e) {
+    protected static Map<String, Object> getBindingForErrors(Exception e, boolean isError) {
 
         Map<String, Object> binding = new HashMap<String, Object>();
-        binding.put("result", e);
+        if (!isError) {
+            binding.put("result", e);
+        } else {
+            binding.put("exception", e);
+        }
         binding.put("session", Scope.Session.current());
         binding.put("request", Http.Request.current());
         binding.put("flash", Scope.Flash.current());
@@ -388,7 +392,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 Logger.error(e, "Trying to flush cookies");
                 // humm ?
             }
-            Map<String, Object> binding = getBindingForErrors(e);
+            Map<String, Object> binding = getBindingForErrors(e, true);
 
             String format = request.format;
             if (format == null || ("XMLHttpRequest".equals(request.headers.get("x-requested-with")) && "html".equals(format))) {
