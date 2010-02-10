@@ -35,6 +35,8 @@ import play.vfs.VirtualFile;
 
 import java.io.*;
 import java.net.URI;
+import java.net.URL;
+import java.net.URLEncoder;
 import java.text.ParseException;
 import java.util.*;
 
@@ -177,9 +179,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         nettyResponse.setContent(buf);
 
         ChannelFuture f = ctx.getChannel().write(nettyResponse);
-        if (!nettyRequest.isKeepAlive()) {
-            f.addListener(ChannelFutureListener.CLOSE);
-        }
+        f.addListener(ChannelFutureListener.CLOSE);
 
     }
 
@@ -204,8 +204,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 addEtag(request, nettyResponse, file);
                 ctx.getChannel().write(nettyResponse);
                 ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedNioFile(response.direct));
-                if (!nettyRequest.isKeepAlive())
-                    writeFuture.addListener(ChannelFutureListener.CLOSE);
+                writeFuture.addListener(ChannelFutureListener.CLOSE);
 
             } catch (Exception e) {
                 e.printStackTrace();
@@ -218,7 +217,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
     }
 
     public static Request parseRequest(ChannelHandlerContext ctx, HttpRequest nettyRequest) throws Exception {
-        final URI uri = new URI(nettyRequest.getUri());
+        final URI uri = new URI(URLEncoder.encode(nettyRequest.getUri(), "UTF-8"));
 
         final Request request = new Request();
         request.remoteAddress = ctx.getChannel().getRemoteAddress().toString();
@@ -465,9 +464,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
 
                     ctx.getChannel().write(nettyResponse);
                     ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedNioFile(file.getRealFile()));
-                    if (!nettyRequest.isKeepAlive()) {
-                        writeFuture.addListener(ChannelFutureListener.CLOSE);
-                    }
+                    writeFuture.addListener(ChannelFutureListener.CLOSE);
                 }
 
             }
