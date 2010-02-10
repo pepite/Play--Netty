@@ -171,13 +171,13 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
 
     }
 
-    protected static void writeResponse(ChannelHandlerContext ctx, Response response, HttpResponse nettyResponse, HttpRequest nettyRequest) {
+    protected static void writeResponse(ChannelHandlerContext ctx, Response response, HttpResponse nettyResponse, HttpRequest nettyRequest) throws IOException {
         ChannelBuffer buf = ChannelBuffers.copiedBuffer(response.out.toByteArray());
-
+        response.out.close();
         nettyResponse.setContent(buf);
 
         ChannelFuture f = ctx.getChannel().write(nettyResponse);
-        if (nettyRequest.isKeepAlive()) {
+        if (!nettyRequest.isKeepAlive()) {
             f.addListener(ChannelFutureListener.CLOSE);
         }
 
@@ -204,7 +204,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 addEtag(request, nettyResponse, file);
                 ctx.getChannel().write(nettyResponse);
                 ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedNioFile(response.direct));
-                if (nettyRequest.isKeepAlive())
+                if (!nettyRequest.isKeepAlive())
                     writeFuture.addListener(ChannelFutureListener.CLOSE);
 
             } catch (Exception e) {
