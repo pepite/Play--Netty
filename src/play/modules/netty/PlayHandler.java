@@ -219,6 +219,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
     }
 
     private static String escapeIllegalCharacters(String uri) throws Exception {
+        // Encode uri according to RFC 2396
         return URLEncoder.encode(uri, "US-ASCII").replaceAll("%2F", "/").replaceAll("%3F", "?").replaceAll("%3D", "=").replaceAll("%26", "&");
     }
 
