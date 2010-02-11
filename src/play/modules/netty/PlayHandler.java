@@ -1,5 +1,6 @@
 package play.modules.netty;
 
+import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.lang.StringUtils;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBufferInputStream;
@@ -35,6 +36,7 @@ import play.vfs.VirtualFile;
 
 import java.io.*;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.text.ParseException;
@@ -216,8 +218,13 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
 
     }
 
+    private static String escapeIllegalCharacters(String uri) throws Exception {
+        return URLEncoder.encode(uri, "US-ASCII").replaceAll("%2F", "/").replaceAll("%3F", "?").replaceAll("%3D", "=").replaceAll("%26", "&");
+    }
+
     public static Request parseRequest(ChannelHandlerContext ctx, HttpRequest nettyRequest) throws Exception {
-        final URI uri = new URI(URLEncoder.encode(nettyRequest.getUri(), "UTF-8"));
+
+        final URI uri = new URI(escapeIllegalCharacters(nettyRequest.getUri()));
 
         final Request request = new Request();
         request.remoteAddress = ctx.getChannel().getRemoteAddress().toString();
@@ -233,7 +240,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         }
 
         request.body = new ChannelBufferInputStream(nettyRequest.getContent());
-        request.url = uri.toString();
+        request.url = uri.toASCIIString();
         request.host = nettyRequest.getHeader("host");
 
         if (request.host.contains(":")) {
