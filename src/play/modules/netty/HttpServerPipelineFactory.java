@@ -6,6 +6,7 @@ import org.jboss.netty.handler.codec.http.HttpChunkAggregator;
 import org.jboss.netty.handler.codec.http.HttpRequestDecoder;
 import org.jboss.netty.handler.codec.http.HttpResponseEncoder;
 import org.jboss.netty.handler.stream.ChunkedWriteHandler;
+import play.Play;
 
 import static org.jboss.netty.channel.Channels.pipeline;
 
@@ -16,9 +17,15 @@ public class HttpServerPipelineFactory implements ChannelPipelineFactory {
         ChannelPipeline pipeline = pipeline();
 
         pipeline.addLast("decoder", new HttpRequestDecoder());
-        pipeline.addLast("aggregator", new HttpChunkAggregator(1048576));
         pipeline.addLast("encoder", new HttpResponseEncoder());
-        pipeline.addLast("chunkedWriter", new ChunkedWriteHandler());
+
+        Integer max = Integer.valueOf(Play.configuration.getProperty("module.netty.maxContentLength", "1048576"));
+        if (max == -1) {
+            max = Integer.MAX_VALUE;
+        }
+        pipeline.addLast("streamer", new ChunkedWriteHandler());
+        pipeline.addLast("aggregator", new HttpChunkAggregator(max));
+        //pipeline.addLast("chunkedWriter", new ChunkedWriteHandler());
         pipeline.addLast("handler", new PlayHandler());
 
         return pipeline;

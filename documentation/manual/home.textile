@@ -2,6 +2,8 @@ h1. Netty module
 
 The netty module allows you to use JBoss Netty:http://jboss.org/netty as a play! server.
 
+Version 3.2.0 alpha 4 of Netty.
+
 h2. <a>Enable the Netty module for the application</a>
 
 In the **/conf/application.conf** file, enable the Netty module by adding this line:
@@ -12,3 +14,10 @@ module.netty=${play.path}/modules/netty
 h2. <a>Starting the Play! with netty as application server</a>
 
 bc. play netty:run myapplication
+
+h2. <a>Configuration</a>
+
+The max upload size can be configured. In your application.conf add the following line:
+
+bc. module.netty.maxContentLength=1048576
+

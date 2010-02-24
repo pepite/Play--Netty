@@ -1,5 +1,6 @@
 package play.modules.netty;
 
+import org.apache.asyncweb.common.HttpHeaderConstants;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.lang.StringUtils;
 import org.jboss.netty.buffer.ChannelBuffer;
@@ -14,7 +15,9 @@ import org.jboss.netty.handler.codec.http.HttpRequest;
 import org.jboss.netty.handler.codec.http.HttpResponse;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.jboss.netty.handler.codec.http.HttpVersion;
+import org.jboss.netty.handler.stream.ChunkedFile;
 import org.jboss.netty.handler.stream.ChunkedNioFile;
+import org.jboss.netty.handler.stream.ChunkedStream;
 import play.Invoker;
 import play.Logger;
 import play.Play;
@@ -51,29 +54,32 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
     @Override
     public void messageReceived(ChannelHandlerContext ctx, MessageEvent e) throws Exception {
         final Object msg = e.getMessage();
-        final HttpRequest nettyRequest = (HttpRequest) msg;
-        final Request request = parseRequest(ctx, nettyRequest);
-        final Response response = new Response();
+         Logger.info("messageReceived");
+        if (msg instanceof HttpRequest) {
+            final HttpRequest nettyRequest = (HttpRequest) msg;
+            final Request request = parseRequest(ctx, nettyRequest);
+            final Response response = new Response();
 
-        try {
-            Http.Response.current.set(response);
-            response.out = new ByteArrayOutputStream();
-            boolean raw = false;
-            for (PlayPlugin plugin : Play.plugins) {
-                if (plugin.rawInvocation(request, response)) {
-                    raw = true;
-                    break;
+            try {
+                Http.Response.current.set(response);
+                response.out = new ByteArrayOutputStream();
+                boolean raw = false;
+                for (PlayPlugin plugin : Play.plugins) {
+                    if (plugin.rawInvocation(request, response)) {
+                        raw = true;
+                        break;
+                    }
                 }
+                if (raw) {
+                    copyResponse(ctx, request, response, nettyRequest);
+                } else {
+                    Invoker.invoke(new NettyInvocation(request, response, ctx, nettyRequest));
+                }
+            } catch (Exception ex) {
+                serve500(ex, ctx);
+                return;
             }
-            if (raw) {
-                copyResponse(ctx, request, response, nettyRequest);
-            } else {
-                Invoker.invoke(new NettyInvocation(request, response, ctx, nettyRequest));
-            }
-        } catch (Exception ex) {
-            serve500(ex, ctx);
-            return;
-        }
+        } 
     }
 
     private static Map<String, RenderStatic> staticPathsCache = new HashMap();
@@ -199,19 +205,55 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
 
         addToResponse(response, nettyResponse);
 
-        final File file = response.direct;
+        final Object obj = response.direct;
+
+        File file = null;
+        InputStream is = null;
+        if (obj instanceof File) {
+            file = (File) obj;
+        } else if (obj instanceof InputStream) {
+            is = (InputStream) obj;
+        }
+     
         if ((file != null) && file.isFile()) {
 
             try {
                 addEtag(request, nettyResponse, file);
+                nettyResponse.setHeader(HttpHeaders.Names.CONTENT_LENGTH, String.valueOf(file.length()));
                 ctx.getChannel().write(nettyResponse);
-                ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedNioFile(response.direct));
-                writeFuture.addListener(ChannelFutureListener.CLOSE);
+                ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedNioFile(file));
+                // Decide whether to close the connection or not.
+                boolean close =
+                        HttpHeaders.Values.CLOSE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION)) ||
+                                nettyRequest.getProtocolVersion().equals(HttpVersion.HTTP_1_0) &&
+                                        !HttpHeaders.Values.KEEP_ALIVE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION));
+
+                if (close) {
+                    // Close the connection when the whole content is written out.
+                    writeFuture.addListener(ChannelFutureListener.CLOSE);
+                }
+
 
             } catch (Exception e) {
                 e.printStackTrace();
                 throw e;
             }
+        }
+        if (is != null) {
+            ctx.getChannel().write(nettyResponse);
+            ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedStream(is));
+            // Decide whether to close the connection or not.
+            boolean close =
+                    HttpHeaders.Values.CLOSE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION)) ||
+                            nettyRequest.getProtocolVersion().equals(HttpVersion.HTTP_1_0) &&
+                                    !HttpHeaders.Values.KEEP_ALIVE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION));
+
+            if (close) {
+                // Close the connection when the whole content is written out.
+                writeFuture.addListener(ChannelFutureListener.CLOSE);
+            }
+
+
         } else {
             writeResponse(ctx, response, nettyResponse, nettyRequest);
         }
@@ -240,6 +282,12 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
             request.contentType = "text/html";
         }
 
+        Logger.info("nettyRequest.getContent() " + nettyRequest.getContent());
+        //  IoBuffer buffer = (IoBuffer) minaRequest.getContent();
+//            request.body = buffer.asInputStream();
+//        } else {
+//            request.body = new FileInputStream(minaRequest.getFileContent());
+//        }
         request.body = new ChannelBufferInputStream(nettyRequest.getContent());
         request.url = uri.toASCIIString();
         request.host = nettyRequest.getHeader("host");
@@ -469,10 +517,19 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                     copyResponse(ctx, request, response, nettyRequest);
                 } else {
                     addEtag(request, nettyResponse, file.getRealFile());
-
+                    nettyResponse.setHeader(HttpHeaders.Names.CONTENT_LENGTH, String.valueOf(file.length()));
                     ctx.getChannel().write(nettyResponse);
                     ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedNioFile(file.getRealFile()));
-                    writeFuture.addListener(ChannelFutureListener.CLOSE);
+                    // Decide whether to close the connection or not.
+                    boolean close =
+                            HttpHeaders.Values.CLOSE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION)) ||
+                                    nettyRequest.getProtocolVersion().equals(HttpVersion.HTTP_1_0) &&
+                                            !HttpHeaders.Values.KEEP_ALIVE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION));
+
+                    if (close) {
+                        // Close the connection when the whole content is written out.
+                        writeFuture.addListener(ChannelFutureListener.CLOSE);
+                    }
                 }
 
             }
