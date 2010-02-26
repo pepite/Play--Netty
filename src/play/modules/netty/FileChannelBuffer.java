@@ -34,6 +34,9 @@ import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.ScatteringByteChannel;
 
 
+/**
+ * Useless channel buffer only used to wrap the input stream....
+ */
 public class FileChannelBuffer extends AbstractChannelBuffer implements WrappedChannelBuffer {
 
     private final File file;
@@ -124,13 +127,11 @@ public class FileChannelBuffer extends AbstractChannelBuffer implements WrappedC
 
     public int setBytes(int index, InputStream in, int length)
             throws IOException {
-        Logger.info("RuntimeException");
         throw new RuntimeException();
     }
 
     public int setBytes(int index, ScatteringByteChannel in, int length)
             throws IOException {
-        Logger.info("RuntimeException");
         throw new RuntimeException();
 
     }
@@ -143,7 +144,6 @@ public class FileChannelBuffer extends AbstractChannelBuffer implements WrappedC
 
     public int getBytes(int index, GatheringByteChannel out, int length)
             throws IOException {
-        Logger.info("getBytes");
         byte[] b = new byte[length];
         is.read(b, index, length);
         ByteBuffer bb = ByteBuffer.wrap(b);
@@ -152,7 +152,6 @@ public class FileChannelBuffer extends AbstractChannelBuffer implements WrappedC
 
     public void getBytes(int index, OutputStream out, int length)
             throws IOException {
-        Logger.info("getBytes");
         byte[] b = new byte[length];
         is.read(b, index, length);
         out.write(b, index, length);
@@ -160,7 +159,6 @@ public class FileChannelBuffer extends AbstractChannelBuffer implements WrappedC
 
     public void getBytes(int index, byte[] dst, int dstIndex, int length) {
         try {
-            Logger.info("getBytes");
             byte[] b = new byte[length];
             is.read(b, index, length);
             System.arraycopy(b, 0, dst, dstIndex, length);
@@ -171,7 +169,6 @@ public class FileChannelBuffer extends AbstractChannelBuffer implements WrappedC
 
     public void getBytes(int index, ChannelBuffer dst, int dstIndex, int length) {
         try {
-            Logger.info("getBytes");
             byte[] b = new byte[length];
             is.read(b, index, length);
             dst.writeBytes(b, dstIndex, length);
@@ -182,7 +179,6 @@ public class FileChannelBuffer extends AbstractChannelBuffer implements WrappedC
 
     public void getBytes(int index, ByteBuffer dst) {
         try {
-            Logger.info("getBytes");
             byte[] b = new byte[is.available() - index];
             is.read(b, index, is.available() - index);
             dst.put(b);
@@ -192,28 +188,26 @@ public class FileChannelBuffer extends AbstractChannelBuffer implements WrappedC
     }
 
     public ChannelBuffer duplicate() {
-        Logger.info("duplicate");
         throw new RuntimeException();
     }
 
     public ChannelBuffer copy(int index, int length) {
-        Logger.info("copy");
         throw new RuntimeException();
     }
 
     public ChannelBuffer slice(int index, int length) {
-        Logger.info("slice");
         throw new RuntimeException();
     }
 
     public byte getByte(int index) {
-        try {
-            byte[] b = new byte[1];
-            is.read(b, index, 1);
-            return b[0];
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+//        try {
+//            byte[] b = new byte[1];
+//            is.read(b, index, 1);
+//            return b[0];
+//        } catch (IOException e) {
+//            throw new RuntimeException(e);
+//        }
+         throw new RuntimeException();
     }
 
     public short getShort(int index) {
@@ -236,8 +230,6 @@ public class FileChannelBuffer extends AbstractChannelBuffer implements WrappedC
     }
 
     public ByteBuffer toByteBuffer(int index, int length) {
-        //return buffer.getChannel().retoByteBuffer(index, length).asReadOnlyBuffer();
-        Logger.info("RuntimeException");
         throw new RuntimeException();
     }
 
@@ -248,7 +240,6 @@ public class FileChannelBuffer extends AbstractChannelBuffer implements WrappedC
 //            bufs[i] = bufs[i].asReadOnlyBuffer();
 //        }
 //        return bufs;
-        Logger.info("RuntimeException");
         throw new RuntimeException();
     }
 
@@ -262,9 +253,10 @@ public class FileChannelBuffer extends AbstractChannelBuffer implements WrappedC
     }
 
     public ChannelBuffer readBytes(int length) {
-          ChannelBuffer buf = ChannelBuffers.buffer(length);
-          getBytes(0, buf);
-          return buf;
+//          ChannelBuffer buf = ChannelBuffers.buffer(length);
+//          getBytes(0, buf);
+//          return buf;
+         throw new RuntimeException();
       }
 
       public ChannelBuffer readBytes(ChannelBufferIndexFinder endIndexFinder) {
