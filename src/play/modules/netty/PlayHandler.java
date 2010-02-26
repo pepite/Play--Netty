@@ -9,7 +9,6 @@ import org.jboss.netty.handler.codec.http.*;
 import org.jboss.netty.handler.stream.ChunkedNioFile;
 import org.jboss.netty.handler.stream.ChunkedStream;
 import play.Invoker;
-import play.Logger;
 import play.Play;
 import play.PlayPlugin;
 import play.data.validation.Validation;
@@ -42,7 +41,6 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
     @Override
     public void messageReceived(ChannelHandlerContext ctx, MessageEvent e) throws Exception {
         final Object msg = e.getMessage();
-        Logger.info("messageReceived");
         if (msg instanceof HttpRequest) {
             final HttpRequest nettyRequest = (HttpRequest) msg;
             final Request request = parseRequest(ctx, nettyRequest);
