@@ -9,6 +9,7 @@ import org.jboss.netty.handler.codec.http.*;
 import org.jboss.netty.handler.stream.ChunkedNioFile;
 import org.jboss.netty.handler.stream.ChunkedStream;
 import play.Invoker;
+import play.Logger;
 import play.Play;
 import play.PlayPlugin;
 import play.data.validation.Validation;
