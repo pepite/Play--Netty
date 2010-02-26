@@ -1,21 +1,11 @@
 package play.modules.netty;
 
-import org.apache.asyncweb.common.HttpHeaderConstants;
-import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.lang.StringUtils;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBufferInputStream;
 import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.channel.*;
 import org.jboss.netty.handler.codec.http.*;
-import org.jboss.netty.handler.codec.http.Cookie;
-import org.jboss.netty.handler.codec.http.DefaultCookie;
-import org.jboss.netty.handler.codec.http.DefaultHttpResponse;
-import org.jboss.netty.handler.codec.http.HttpRequest;
-import org.jboss.netty.handler.codec.http.HttpResponse;
-import org.jboss.netty.handler.codec.http.HttpResponseStatus;
-import org.jboss.netty.handler.codec.http.HttpVersion;
-import org.jboss.netty.handler.stream.ChunkedFile;
 import org.jboss.netty.handler.stream.ChunkedNioFile;
 import org.jboss.netty.handler.stream.ChunkedStream;
 import play.Invoker;
@@ -39,8 +29,6 @@ import play.vfs.VirtualFile;
 
 import java.io.*;
 import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URL;
 import java.net.URLEncoder;
 import java.text.ParseException;
 import java.util.*;
@@ -54,7 +42,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
     @Override
     public void messageReceived(ChannelHandlerContext ctx, MessageEvent e) throws Exception {
         final Object msg = e.getMessage();
-         Logger.info("messageReceived");
+        Logger.info("messageReceived");
         if (msg instanceof HttpRequest) {
             final HttpRequest nettyRequest = (HttpRequest) msg;
             final Request request = parseRequest(ctx, nettyRequest);
@@ -79,7 +67,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 serve500(ex, ctx);
                 return;
             }
-        } 
+        }
     }
 
     private static Map<String, RenderStatic> staticPathsCache = new HashMap();
@@ -206,7 +194,6 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         addToResponse(response, nettyResponse);
 
         final Object obj = response.direct;
-
         File file = null;
         InputStream is = null;
         if (obj instanceof File) {
@@ -214,7 +201,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         } else if (obj instanceof InputStream) {
             is = (InputStream) obj;
         }
-     
+
         if ((file != null) && file.isFile()) {
 
             try {
@@ -238,8 +225,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 e.printStackTrace();
                 throw e;
             }
-        }
-        if (is != null) {
+        } else if (is != null) {
             ctx.getChannel().write(nettyResponse);
             ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedStream(is));
             // Decide whether to close the connection or not.
@@ -282,13 +268,14 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
             request.contentType = "text/html";
         }
 
-        Logger.info("nettyRequest.getContent() " + nettyRequest.getContent());
-        //  IoBuffer buffer = (IoBuffer) minaRequest.getContent();
-//            request.body = buffer.asInputStream();
-//        } else {
-//            request.body = new FileInputStream(minaRequest.getFileContent());
-//        }
-        request.body = new ChannelBufferInputStream(nettyRequest.getContent());
+        ChannelBuffer b = nettyRequest.getContent();
+        if (b instanceof FileChannelBuffer) {
+            FileChannelBuffer buffer = (FileChannelBuffer) nettyRequest.getContent();
+            request.body = buffer.getInputStream();
+        } else {
+            request.body = new ChannelBufferInputStream(b);
+        }
+
         request.url = uri.toASCIIString();
         request.host = nettyRequest.getHeader("host");
 
