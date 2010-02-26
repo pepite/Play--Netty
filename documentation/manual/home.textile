@@ -15,9 +15,3 @@ h2. <a>Starting the Play! with netty as application server</a>
 
 bc. play netty:run myapplication
 
-h2. <a>Configuration</a>
-
-The max upload size can be configured. In your application.conf add the following line:
-
-bc. module.netty.maxContentLength=1048576
-
