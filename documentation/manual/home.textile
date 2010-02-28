@@ -17,3 +17,20 @@ h2. <a>Starting the Play! with netty as application server</a>
 
 bc. play netty:run myapplication
 
+h2. <a>Configuration</a>
+
+The max upload size can be configured. In your application.conf add the following line:
+
+bc. module.netty.maxContentLength=1048576
+
+If the limit is exceeded, then an error message is set in the error scope. You can access it with the #{error} tag:
+
+bc. #{errors}
+       <li>${error}</li>
+   #{/errors}
+
+To change the default message, use the following message key:
+
+play.module.netty.content.length.exceeded=My error
+
+This property is currently set in the conf/messages directory of the netty module.

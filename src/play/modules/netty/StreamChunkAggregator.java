@@ -29,11 +29,14 @@ import org.jboss.netty.channel.ChannelHandlerContext;
 import org.jboss.netty.channel.Channels;
 import org.jboss.netty.channel.MessageEvent;
 import org.jboss.netty.channel.SimpleChannelUpstreamHandler;
+import org.jboss.netty.handler.codec.frame.TooLongFrameException;
 import org.jboss.netty.handler.codec.http.HttpChunk;
 import org.jboss.netty.handler.codec.http.HttpHeaders;
 import org.jboss.netty.handler.codec.http.HttpMessage;
 import play.Logger;
 import play.Play;
+import play.mvc.Http;
+import play.mvc.Scope;
 
 import java.io.*;
 import java.util.List;
@@ -43,12 +46,15 @@ public class StreamChunkAggregator extends SimpleChannelUpstreamHandler {
 
     private volatile HttpMessage currentMessage;
     private volatile String name;
+    private final int maxContentLength;
+
 
     /**
      * Creates a new instance.
      */
-    public StreamChunkAggregator() {
+    public StreamChunkAggregator(int maxContentLength) {
         super();
+        this.maxContentLength = maxContentLength;
     }
 
     @Override
@@ -87,8 +93,18 @@ public class StreamChunkAggregator extends SimpleChannelUpstreamHandler {
             // Merge the received chunk into the content of the current message.
             final HttpChunk chunk = (HttpChunk) msg;
             final File file = new File(Play.tmpDir, name);
+                       
+            if (maxContentLength != -1 && (file.length() > maxContentLength - chunk.getContent().readableBytes())) {
+                currentMessage.setHeader(
+                        HttpHeaders.Names.CONTENT_LENGTH, maxContentLength);
+                currentMessage.setHeader(
+                        HttpHeaders.Names.WARNING, "play.module.netty.content.length.exceeded");
+                return;
+            }
+            
             final FileWriter fstream = new FileWriter(file, true);
             final BufferedWriter out = new BufferedWriter(fstream);
+
             IOUtils.copy(new ByteArrayInputStream(chunk.getContent().array()), out);
             out.flush();
             out.close();

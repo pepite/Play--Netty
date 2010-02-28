@@ -12,8 +12,11 @@ import play.Invoker;
 import play.Logger;
 import play.Play;
 import play.PlayPlugin;
-import play.data.validation.Validation;
+import play.data.validation.*;
+import play.data.validation.Error;
 import play.exceptions.PlayException;
+import play.exceptions.UnexpectedException;
+import play.i18n.Messages;
 import play.libs.MimeTypes;
 import play.mvc.ActionInvoker;
 import play.mvc.Http;
@@ -29,9 +32,11 @@ import play.vfs.VirtualFile;
 
 import java.io.*;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.text.ParseException;
 import java.util.*;
+import java.util.regex.Matcher;
 
 
 @ChannelPipelineCoverage("one")
@@ -132,10 +137,35 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         @Override
         public void execute() throws Exception {
             ActionInvoker.invoke(request, response);
+            saveExceededSizeError(nettyRequest, response);
             copyResponse(ctx, request, response, nettyRequest);
         }
     }
 
+    void saveExceededSizeError(HttpRequest nettyRequest, Response response) {
+
+        String warning = nettyRequest.getHeader(HttpHeaders.Names.WARNING);
+        String length = nettyRequest.getHeader(HttpHeaders.Names.CONTENT_LENGTH);
+        if (warning != null) {
+            try {
+                StringBuilder error = new StringBuilder();
+                error.append("\u0000");
+                error.append(warning);
+                error.append(":");
+                error.append(Messages.get(warning, length));
+                error.append("\u0000");
+                if (response.cookies.get(Scope.COOKIE_PREFIX + "_ERRORS") != null && response.cookies.get(Scope.COOKIE_PREFIX + "_ERRORS").value != null) {
+                   error.append(response.cookies.get(Scope.COOKIE_PREFIX + "_ERRORS").value);
+                }
+                String errorData = URLEncoder.encode(error.toString(), "utf-8");
+                response.setCookie(Scope.COOKIE_PREFIX + "_ERRORS", errorData);
+            } catch (Exception e) {
+                throw new UnexpectedException("Flash serialization problem", e);
+            }
+        }
+    }        // Thread
+
+    public static String COOKIE_PREFIX = Play.configuration.getProperty("application.session.cookie", "PLAY");
 
     protected static void addToResponse(Response response, HttpResponse nettyResponse) {
         Map<String, Http.Header> headers = response.headers;
@@ -182,7 +212,6 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         response.out.flush();
         HttpResponse nettyResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(response.status));
         nettyResponse.setHeader("Server", signature);
-
 
         if (response.contentType != null) {
             nettyResponse.setHeader("Content-Type", response.contentType + (response.contentType.startsWith("text/") && !response.contentType.contains("charset") ? "; charset=utf-8" : ""));
@@ -270,7 +299,17 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         ChannelBuffer b = nettyRequest.getContent();
         if (b instanceof FileChannelBuffer) {
             FileChannelBuffer buffer = (FileChannelBuffer) nettyRequest.getContent();
-            request.body = buffer.getInputStream();
+            // An error occured
+            Integer max = Integer.valueOf(Play.configuration.getProperty("module.netty.maxContentLength", "1048576"));
+            if (max == -1) {
+                max = Integer.MAX_VALUE;
+            }
+            if (buffer.getInputStream().available() < max) {
+                request.body = buffer.getInputStream();
+            } else {
+                request.body = new ByteArrayInputStream(new byte[0]);
+            }
+
         } else {
             request.body = new ChannelBufferInputStream(b);
         }
@@ -394,6 +433,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         } catch (Exception ex) {
             Logger.error(ex, "Error when getting Validation errors");
         }
+
         return binding;
     }
 

@@ -14,6 +14,11 @@ public class HttpServerPipelineFactory implements ChannelPipelineFactory {
 
     public ChannelPipeline getPipeline() throws Exception {
 
+        Integer max = Integer.valueOf(Play.configuration.getProperty("module.netty.maxContentLength", "1048576"));
+        if (max == -1) {
+            max = Integer.MAX_VALUE;
+        }
+
         ChannelPipeline pipeline = pipeline();
 
         pipeline.addLast("decoder", new HttpRequestDecoder());
@@ -21,8 +26,8 @@ public class HttpServerPipelineFactory implements ChannelPipelineFactory {
 
 
         pipeline.addLast("streamer", new ChunkedWriteHandler());
-        pipeline.addLast("aggregator", new StreamChunkAggregator());
-                      
+        pipeline.addLast("aggregator", new StreamChunkAggregator(max));
+
         pipeline.addLast("handler", new PlayHandler());
 
         return pipeline;
