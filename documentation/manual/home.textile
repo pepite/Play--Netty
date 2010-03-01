@@ -21,7 +21,7 @@ h2. <a>Configuration</a>
 
 By default, there is no maximum upload size. But the max upload size can be configured. In your application.conf add the following line:
 
-bc. module.netty.maxContentLength=1048576
+bc. play.module.netty.maxContentLength=1048576
 
 A value of -1 means that there is no maximum upload size.
 
