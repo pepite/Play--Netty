@@ -165,8 +165,6 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         }
     }        // Thread
 
-    public static String COOKIE_PREFIX = Play.configuration.getProperty("application.session.cookie", "PLAY");
-
     protected static void addToResponse(Response response, HttpResponse nettyResponse) {
         Map<String, Http.Header> headers = response.headers;
         for (Map.Entry<String, Http.Header> entry : headers.entrySet()) {
@@ -300,11 +298,8 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         if (b instanceof FileChannelBuffer) {
             FileChannelBuffer buffer = (FileChannelBuffer) nettyRequest.getContent();
             // An error occured
-            Integer max = Integer.valueOf(Play.configuration.getProperty("module.netty.maxContentLength", "1048576"));
-            if (max == -1) {
-                max = Integer.MAX_VALUE;
-            }
-            if (buffer.getInputStream().available() < max) {
+            Integer max = Integer.valueOf(Play.configuration.getProperty("play.module.netty.maxContentLength", "-1"));
+            if (max == -1 ||  buffer.getInputStream().available() < max) {
                 request.body = buffer.getInputStream();
             } else {
                 request.body = new ByteArrayInputStream(new byte[0]);

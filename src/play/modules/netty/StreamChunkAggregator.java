@@ -93,8 +93,7 @@ public class StreamChunkAggregator extends SimpleChannelUpstreamHandler {
             // Merge the received chunk into the content of the current message.
             final HttpChunk chunk = (HttpChunk) msg;
             final File file = new File(Play.tmpDir, name);
-                       
-            if (maxContentLength != -1 && (file.length() > maxContentLength - chunk.getContent().readableBytes())) {
+            if (maxContentLength != -1 && (file.length() > (maxContentLength - chunk.getContent().readableBytes()))) {
                 currentMessage.setHeader(
                         HttpHeaders.Names.CONTENT_LENGTH, maxContentLength);
                 currentMessage.setHeader(
