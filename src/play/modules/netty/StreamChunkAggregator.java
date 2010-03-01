@@ -98,7 +98,7 @@ public class StreamChunkAggregator extends SimpleChannelUpstreamHandler {
                 currentMessage.setHeader(
                         HttpHeaders.Names.CONTENT_LENGTH, maxContentLength);
                 currentMessage.setHeader(
-                        HttpHeaders.Names.WARNING, "play.module.netty.content.length.exceeded");
+                        HttpHeaders.Names.WARNING, "play.netty.content.length.exceeded");
                 return;
             }
             

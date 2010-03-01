@@ -19,15 +19,17 @@ bc. play netty:run myapplication
 
 h2. <a>Configuration</a>
 
-The max upload size can be configured. In your application.conf add the following line:
+By default, there is no maximum upload size. But the max upload size can be configured. In your application.conf add the following line:
 
 bc. module.netty.maxContentLength=1048576
+
+A value of -1 means that there is no maximum upload size.
 
 If the limit is exceeded, then an error message is set in the error scope. You can access it with the #{error} tag:
 
 bc. #{errors}
-       <li>${error}</li>
-   #{/errors}
+   <li>${error}</li>
+#{/errors}
 
 To change the default message, use the following message key:
 
