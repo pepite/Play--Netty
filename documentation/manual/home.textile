@@ -23,7 +23,9 @@ By default, there is no maximum upload size. But the max upload size can be conf
 
 bc. play.module.netty.maxContentLength=1048576
 
-A value of -1 means that there is no maximum upload size.
+This line set the maximum upload size to 1048576 bytes.
+
+A value of -1 means that there is no maximum upload size (the default).
 
 If the limit is exceeded, then an error message is set in the error scope. You can access it with the #{error} tag:
 
