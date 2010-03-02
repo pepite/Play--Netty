@@ -236,15 +236,16 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 ctx.getChannel().write(nettyResponse);
                 ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedNioFile(file));
                 // Decide whether to close the connection or not.
-                boolean close =
-                        HttpHeaders.Values.CLOSE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION)) ||
-                                nettyRequest.getProtocolVersion().equals(HttpVersion.HTTP_1_0) &&
-                                        !HttpHeaders.Values.KEEP_ALIVE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION));
-
-                if (close) {
+                // Comment out for now as it does not seem to work with Opera and IE
+//                boolean close =
+//                        HttpHeaders.Values.CLOSE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION)) ||
+//                                nettyRequest.getProtocolVersion().equals(HttpVersion.HTTP_1_0) &&
+//                                        !HttpHeaders.Values.KEEP_ALIVE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION));
+//
+//                if (close) {
                     // Close the connection when the whole content is written out.
                     writeFuture.addListener(ChannelFutureListener.CLOSE);
-                }
+                //}
 
 
             } catch (Exception e) {
@@ -254,16 +255,17 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         } else if (is != null) {
             ctx.getChannel().write(nettyResponse);
             ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedStream(is));
+            // Comment out for now as it does not seem to work with Opera and IE
             // Decide whether to close the connection or not.
-            boolean close =
-                    HttpHeaders.Values.CLOSE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION)) ||
-                            nettyRequest.getProtocolVersion().equals(HttpVersion.HTTP_1_0) &&
-                                    !HttpHeaders.Values.KEEP_ALIVE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION));
-
-            if (close) {
+//            boolean close =
+//                    HttpHeaders.Values.CLOSE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION)) ||
+//                            nettyRequest.getProtocolVersion().equals(HttpVersion.HTTP_1_0) &&
+//                                    !HttpHeaders.Values.KEEP_ALIVE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION));
+//
+//            if (close) {
                 // Close the connection when the whole content is written out.
                 writeFuture.addListener(ChannelFutureListener.CLOSE);
-            }
+          //  }
 
 
         } else {
@@ -542,15 +544,16 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                     ctx.getChannel().write(nettyResponse);
                     ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedNioFile(file.getRealFile()));
                     // Decide whether to close the connection or not.
-                    boolean close =
-                            HttpHeaders.Values.CLOSE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION)) ||
-                                    nettyRequest.getProtocolVersion().equals(HttpVersion.HTTP_1_0) &&
-                                            !HttpHeaders.Values.KEEP_ALIVE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION));
-
-                    if (close) {
+                     // Decide whether to close the connection or not.
+//                    boolean close =
+//                            HttpHeaders.Values.CLOSE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION)) ||
+//                                    nettyRequest.getProtocolVersion().equals(HttpVersion.HTTP_1_0) &&
+//                                            !HttpHeaders.Values.KEEP_ALIVE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION));
+//
+//                    if (close) {
                         // Close the connection when the whole content is written out.
                         writeFuture.addListener(ChannelFutureListener.CLOSE);
-                    }
+                   // }
                 }
 
             }
