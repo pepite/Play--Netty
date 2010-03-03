@@ -25,10 +25,7 @@ package play.modules.netty;
 
 import org.apache.commons.io.IOUtils;
 import org.jboss.netty.buffer.ChannelBuffers;
-import org.jboss.netty.channel.ChannelHandlerContext;
-import org.jboss.netty.channel.Channels;
-import org.jboss.netty.channel.MessageEvent;
-import org.jboss.netty.channel.SimpleChannelUpstreamHandler;
+import org.jboss.netty.channel.*;
 import org.jboss.netty.handler.codec.frame.TooLongFrameException;
 import org.jboss.netty.handler.codec.http.HttpChunk;
 import org.jboss.netty.handler.codec.http.HttpHeaders;
@@ -42,18 +39,18 @@ import java.io.*;
 import java.util.List;
 import java.util.UUID;
 
+@ChannelPipelineCoverage("one")
 public class StreamChunkAggregator extends SimpleChannelUpstreamHandler {
 
     private volatile HttpMessage currentMessage;
-    private volatile String name;
+    private volatile BufferedWriter out;
     private final int maxContentLength;
-
+    private volatile File file;
 
     /**
      * Creates a new instance.
      */
     public StreamChunkAggregator(int maxContentLength) {
-        super();
         this.maxContentLength = maxContentLength;
     }
 
@@ -67,8 +64,10 @@ public class StreamChunkAggregator extends SimpleChannelUpstreamHandler {
             return;
         }
 
-        String localFile = this.name;
+
         HttpMessage currentMessage = this.currentMessage;
+        BufferedWriter out = this.out;
+        File localFile = this.file;
         if (currentMessage == null) {
             HttpMessage m = (HttpMessage) msg;
             if (m.isChunked()) {
@@ -83,43 +82,43 @@ public class StreamChunkAggregator extends SimpleChannelUpstreamHandler {
                     m.removeHeader(HttpHeaders.Names.TRANSFER_ENCODING);
                 }
                 this.currentMessage = m;
-                this.name = localName;
-
+                this.file = new File(Play.tmpDir, localName);
+                final FileWriter fstream = new FileWriter(file, true);
+                this.out = new BufferedWriter(fstream);
             } else {
                 // Not a chunked message - pass through.
                 ctx.sendUpstream(e);
             }
         } else {
+            // TODO: If less that threshold then in memory
             // Merge the received chunk into the content of the current message.
             final HttpChunk chunk = (HttpChunk) msg;
-            final File file = new File(Play.tmpDir, name);
-            if (maxContentLength != -1 && (file.length() > (maxContentLength - chunk.getContent().readableBytes()))) {
-                currentMessage.setHeader(
-                        HttpHeaders.Names.CONTENT_LENGTH, maxContentLength);
+            if (maxContentLength != -1 && (localFile.length() > (maxContentLength - chunk.getContent().readableBytes()))) {
+//                currentMessage.addHeader(
+//                        HttpHeaders.Names.CONTENT_LENGTH, String.valueOf(maxContentLength));
                 currentMessage.setHeader(
                         HttpHeaders.Names.WARNING, "play.netty.content.length.exceeded");
-                return;
-            }
-            
-            final FileWriter fstream = new FileWriter(file, true);
-            final BufferedWriter out = new BufferedWriter(fstream);
-
-            IOUtils.copy(new ByteArrayInputStream(chunk.getContent().array()), out);
-            out.flush();
-            out.close();
-            fstream.close();
-
-            if (chunk.isLast()) {
-                currentMessage.setHeader(
-                        HttpHeaders.Names.CONTENT_LENGTH,
-                        String.valueOf(localFile.length()));
+            } else {
+                byte[] b = new byte[chunk.getContent().capacity()];
+                chunk.getContent().getBytes(0, b);
+                IOUtils.copy(new ByteArrayInputStream(b), out);
 
 
-                currentMessage.setContent(new FileChannelBuffer(file));
+                //fstream.close();
 
-                this.name = null;
-                this.currentMessage = null;
-                Channels.fireMessageReceived(ctx, currentMessage, e.getRemoteAddress());
+                if (chunk.isLast()) {
+                    currentMessage.setHeader(
+                            HttpHeaders.Names.CONTENT_LENGTH,
+                            String.valueOf(localFile.length()));
+
+                    currentMessage.setContent(new FileChannelBuffer(localFile));
+                    out.flush();
+                    out.close();
+                    this.out = null;
+                    this.currentMessage = null;
+                    this.file = null;
+                    Channels.fireMessageReceived(ctx, currentMessage, e.getRemoteAddress());
+                }
             }
         }
 

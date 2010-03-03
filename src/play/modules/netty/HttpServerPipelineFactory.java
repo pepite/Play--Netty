@@ -19,15 +19,20 @@ public class HttpServerPipelineFactory implements ChannelPipelineFactory {
             max = Integer.MAX_VALUE;
         }
 
+        Integer threshold = Integer.valueOf(Play.configuration.getProperty("play.module.netty.threshold", "8192"));
+                if (max == -1) {
+                    max = Integer.MAX_VALUE;
+                }
+
         ChannelPipeline pipeline = pipeline();
 
         pipeline.addLast("decoder", new HttpRequestDecoder());
         pipeline.addLast("encoder", new HttpResponseEncoder());
-
-
-        pipeline.addLast("streamer", new ChunkedWriteHandler());
         pipeline.addLast("aggregator", new StreamChunkAggregator(max));
+        //pipeline.addLast("aggregator", new HttpChunkAggregator(max));
+        pipeline.addLast("chunkedWriter", new ChunkedWriteHandler());
 
+        
         pipeline.addLast("handler", new PlayHandler());
 
         return pipeline;

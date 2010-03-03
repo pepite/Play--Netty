@@ -12,8 +12,7 @@ import play.Invoker;
 import play.Logger;
 import play.Play;
 import play.PlayPlugin;
-import play.data.validation.*;
-import play.data.validation.Error;
+import play.data.validation.Validation;
 import play.exceptions.PlayException;
 import play.exceptions.UnexpectedException;
 import play.i18n.Messages;
@@ -32,11 +31,11 @@ import play.vfs.VirtualFile;
 
 import java.io.*;
 import java.net.URI;
-import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.text.ParseException;
 import java.util.*;
-import java.util.regex.Matcher;
+
+import static org.jboss.netty.handler.codec.http.HttpHeaders.Names.*;
 
 
 @ChannelPipelineCoverage("one")
@@ -68,7 +67,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                     Invoker.invoke(new NettyInvocation(request, response, ctx, nettyRequest));
                 }
             } catch (Exception ex) {
-                serve500(ex, ctx);
+                serve500(ex, ctx, nettyRequest);
                 return;
             }
         }
@@ -110,7 +109,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
             try {
                 Router.routeOnlyStatic(request);
             } catch (NotFound e) {
-                serve404(e, ctx, request);
+                serve404(e, ctx, request, nettyRequest);
                 return false;
             } catch (RenderStatic e) {
                 if (Play.mode == Play.Mode.PROD) {
@@ -130,7 +129,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 super.run();
             } catch (Exception e) {
                 e.printStackTrace();
-                serve500(e, ctx);
+                serve500(e, ctx, nettyRequest);
             }
         }
 
@@ -155,7 +154,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 error.append(Messages.get(warning, length));
                 error.append("\u0000");
                 if (response.cookies.get(Scope.COOKIE_PREFIX + "_ERRORS") != null && response.cookies.get(Scope.COOKIE_PREFIX + "_ERRORS").value != null) {
-                   error.append(response.cookies.get(Scope.COOKIE_PREFIX + "_ERRORS").value);
+                    error.append(response.cookies.get(Scope.COOKIE_PREFIX + "_ERRORS").value);
                 }
                 String errorData = URLEncoder.encode(error.toString(), "utf-8");
                 response.setCookie(Scope.COOKIE_PREFIX + "_ERRORS", errorData);
@@ -176,7 +175,6 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         CookieEncoder encoder = new CookieEncoder(true);
         Map<String, Http.Cookie> cookies = response.cookies;
         for (Http.Cookie cookie : cookies.values()) {
-
             Cookie c = new DefaultCookie(cookie.name, cookie.value);
             c.setSecure(cookie.secure);
             c.setPath(cookie.path);
@@ -187,34 +185,55 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 c.setMaxAge(cookie.maxAge);
             }
             encoder.addCookie(c);
-            nettyResponse.addHeader("Set-Cookie", encoder.encode());
         }
-
-        if (!response.headers.containsKey("cache-control") && !response.headers.containsKey("Cache-Control")) {
-            nettyResponse.setHeader("Cache-Control", "no-cache");
+        if (!cookies.isEmpty()) {
+            nettyResponse.addHeader(SET_COOKIE, encoder.encode());
+        }
+        if (!response.headers.containsKey(CACHE_CONTROL)) {
+            nettyResponse.setHeader(CACHE_CONTROL, "no-cache");
         }
 
     }
 
-    protected static void writeResponse(ChannelHandlerContext ctx, Response response, HttpResponse nettyResponse, HttpRequest nettyRequest) throws IOException {
-        ChannelBuffer buf = ChannelBuffers.copiedBuffer(response.out.toByteArray());
-        response.out.close();
+    protected static void writeResponse(ChannelHandlerContext ctx, Response response, HttpResponse nettyResponse, HttpRequest nettyRequest, boolean close) throws IOException {
+        byte[] content = response.out.toByteArray();
+        ChannelBuffer buf = ChannelBuffers.copiedBuffer(content);
         nettyResponse.setContent(buf);
 
         ChannelFuture f = ctx.getChannel().write(nettyResponse);
-        f.addListener(ChannelFutureListener.CLOSE);
+        //if (close) {
+            // Close the connection when the whole content is written out.
+            f.addListener(ChannelFutureListener.CLOSE);
+        //}
 
     }
 
     public static void copyResponse(ChannelHandlerContext ctx, Request request, Response response, HttpRequest nettyRequest) throws Exception {
         response.out.flush();
+
+        // Decide whether to close the connection or not.
+        boolean http10 = nettyRequest.getProtocolVersion().equals(HttpVersion.HTTP_1_0);
+        boolean close =
+                HttpHeaders.Values.CLOSE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION)) ||
+                        (http10 && !HttpHeaders.Values.KEEP_ALIVE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION)));
+
+        // Build the response object.
+//        org.jboss.netty.handler.codec.http.HttpResponse nettyResponse;
+//        if (http10) {
+//            nettyResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_0, HttpResponseStatus.valueOf(response.status));
+//            if (!close) {
+//                nettyResponse.addHeader(HttpHeaders.Names.CONNECTION, "Keep-Alive");
+//            }
+//        } else {
+//            nettyResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(response.status));
+//        }
         HttpResponse nettyResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(response.status));
-        nettyResponse.setHeader("Server", signature);
+        nettyResponse.setHeader(SERVER, signature);
 
         if (response.contentType != null) {
-            nettyResponse.setHeader("Content-Type", response.contentType + (response.contentType.startsWith("text/") && !response.contentType.contains("charset") ? "; charset=utf-8" : ""));
+            nettyResponse.setHeader(CONTENT_TYPE, response.contentType + (response.contentType.startsWith("text/") && !response.contentType.contains("charset") ? "; charset=utf-8" : ""));
         } else {
-            nettyResponse.setHeader("Content-Type", "text/plain; charset=utf-8");
+            nettyResponse.setHeader(CONTENT_TYPE, "text/plain; charset=utf-8");
         }
 
         addToResponse(response, nettyResponse);
@@ -229,47 +248,29 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         }
 
         if ((file != null) && file.isFile()) {
-
             try {
                 addEtag(request, nettyResponse, file);
                 nettyResponse.setHeader(HttpHeaders.Names.CONTENT_LENGTH, String.valueOf(file.length()));
                 ctx.getChannel().write(nettyResponse);
                 ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedNioFile(file));
-                // Decide whether to close the connection or not.
-                // Comment out for now as it does not seem to work with Opera and IE
-//                boolean close =
-//                        HttpHeaders.Values.CLOSE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION)) ||
-//                                nettyRequest.getProtocolVersion().equals(HttpVersion.HTTP_1_0) &&
-//                                        !HttpHeaders.Values.KEEP_ALIVE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION));
-//
-//                if (close) {
+                //if (close) {
                     // Close the connection when the whole content is written out.
                     writeFuture.addListener(ChannelFutureListener.CLOSE);
                 //}
-
-
             } catch (Exception e) {
-                e.printStackTrace();
                 throw e;
             }
         } else if (is != null) {
             ctx.getChannel().write(nettyResponse);
             ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedStream(is));
-            // Comment out for now as it does not seem to work with Opera and IE
-            // Decide whether to close the connection or not.
-//            boolean close =
-//                    HttpHeaders.Values.CLOSE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION)) ||
-//                            nettyRequest.getProtocolVersion().equals(HttpVersion.HTTP_1_0) &&
-//                                    !HttpHeaders.Values.KEEP_ALIVE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION));
-//
-//            if (close) {
+            //if (close) {
                 // Close the connection when the whole content is written out.
                 writeFuture.addListener(ChannelFutureListener.CLOSE);
-          //  }
+            //}
 
 
         } else {
-            writeResponse(ctx, response, nettyResponse, nettyRequest);
+            writeResponse(ctx, response, nettyResponse, nettyRequest, close);
         }
 
     }
@@ -289,7 +290,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         request.path = uri.getPath();
         request.querystring = uri.getQuery() == null ? "" : uri.getQuery();
 
-        final String contentType = nettyRequest.getHeader("Content-Type");
+        final String contentType = nettyRequest.getHeader(CONTENT_TYPE);
         if (contentType != null) {
             request.contentType = contentType.split(";")[0].trim().toLowerCase();
         } else {
@@ -297,11 +298,13 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         }
 
         ChannelBuffer b = nettyRequest.getContent();
+
         if (b instanceof FileChannelBuffer) {
             FileChannelBuffer buffer = (FileChannelBuffer) nettyRequest.getContent();
             // An error occured
             Integer max = Integer.valueOf(Play.configuration.getProperty("play.module.netty.maxContentLength", "-1"));
-            if (max == -1 ||  buffer.getInputStream().available() < max) {
+            if (max == -1 || buffer.getInputStream().available() < max) {
+
                 request.body = buffer.getInputStream();
             } else {
                 request.body = new ByteArrayInputStream(new byte[0]);
@@ -312,7 +315,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         }
 
         request.url = uri.toASCIIString();
-        request.host = nettyRequest.getHeader("host");
+        request.host = nettyRequest.getHeader(HOST);
 
         if (request.host.contains(":")) {
             final String[] host = request.host.split(":");
@@ -386,19 +389,18 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         e.getChannel().close();
     }
 
-    public static void serve404(NotFound e, ChannelHandlerContext ctx, Request request) {
+    public static void serve404(NotFound e, ChannelHandlerContext ctx, Request request, HttpRequest nettyRequest) {
         HttpResponse nettyResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.NOT_FOUND);
-        nettyResponse.setHeader("Server", signature);
+        nettyResponse.setHeader(SERVER, signature);
 
-        nettyResponse.setHeader("Content-Type", "text/html");
+        nettyResponse.setHeader(CONTENT_TYPE, "text/html");
         Map<String, Object> binding = getBindingForErrors(e, false);
 
         String format = Request.current().format;
         if (format == null || ("XMLHttpRequest".equals(request.headers.get("x-requested-with")) && "html".equals(format))) {
             format = "txt";
         }
-        // TODO: is that correct? xxx.?
-        nettyResponse.setHeader("Content-Type", (MimeTypes.getContentType("xxx." + format, "text/plain")));
+        nettyResponse.setHeader(CONTENT_TYPE, (MimeTypes.getContentType("404." + format, "text/plain")));
 
 
         String errorHtml = TemplateLoader.load("errors/404." + format).render(binding);
@@ -435,10 +437,10 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
     }
 
     // TODO: add request and response as parameter
-    public static void serve500(Exception e, ChannelHandlerContext ctx) {
+    public static void serve500(Exception e, ChannelHandlerContext ctx, HttpRequest nettyRequest) {
 
         HttpResponse nettyResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.INTERNAL_SERVER_ERROR);
-        nettyResponse.setHeader("Server", signature);
+        nettyResponse.setHeader(SERVER, signature);
 
         Request request = Request.current();
         Response response = Response.current();
@@ -464,8 +466,10 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                     }
                     encoder.addCookie(c);
                 }
-
-                nettyResponse.setHeader("Cookie", encoder.encode());
+                if (!cookies.isEmpty()) {
+                    nettyResponse.addHeader(SET_COOKIE, encoder.encode());
+                }
+                //nettyResponse.setHeader("Cookie", encoder.encode());
             } catch (Exception exx) {
                 Logger.error(e, "Trying to flush cookies");
                 // humm ?
@@ -478,7 +482,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
             }
 
             // TODO: is that correct? xxx.?
-            nettyResponse.setHeader("Content-Type", (MimeTypes.getContentType("xxx." + format, "text/plain")));
+            nettyResponse.setHeader("Content-Type", (MimeTypes.getContentType("500." + format, "text/plain")));
             try {
                 String errorHtml = TemplateLoader.load("errors/500." + format).render(binding);
 
@@ -516,8 +520,24 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
     }
 
     public static void serveStatic(RenderStatic renderStatic, ChannelHandlerContext ctx, Request request, Response response, HttpRequest nettyRequest) {
-        HttpResponse nettyResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
-        nettyResponse.setHeader("Server", signature);
+        // Decide whether to close the connection or not.
+//               boolean http10 = nettyRequest.getProtocolVersion().equals(HttpVersion.HTTP_1_0);
+//               boolean close =
+//                       HttpHeaders.Values.CLOSE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION)) ||
+//                               (http10 && !HttpHeaders.Values.KEEP_ALIVE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION)));
+
+               // Build the response object.
+//               org.jboss.netty.handler.codec.http.HttpResponse nettyResponse;
+//               if (http10) {
+//                   nettyResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_0, HttpResponseStatus.valueOf(response.status));
+//                   if (!close) {
+//                       nettyResponse.addHeader(HttpHeaders.Names.CONNECTION, "Keep-Alive");
+//                   }
+//               } else {
+//                   nettyResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(response.status));
+//               }
+               HttpResponse nettyResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(response.status));
+               nettyResponse.setHeader("Server", signature);
         try {
             VirtualFile file = Play.getVirtualFile(renderStatic.file);
             if (file != null && file.exists() && file.isDirectory()) {
@@ -527,7 +547,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 }
             }
             if ((file == null || !file.exists())) {
-                serve404(new NotFound("The file " + renderStatic.file + " does not exist"), ctx, request);
+                serve404(new NotFound("The file " + renderStatic.file + " does not exist"), ctx, request, nettyRequest);
             } else {
                 boolean raw = false;
                 for (PlayPlugin plugin : Play.plugins) {
@@ -541,19 +561,13 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 } else {
                     addEtag(request, nettyResponse, file.getRealFile());
                     nettyResponse.setHeader(HttpHeaders.Names.CONTENT_LENGTH, String.valueOf(file.length()));
+                    nettyResponse.setHeader(CONTENT_TYPE, (MimeTypes.getContentType(file.getName(), "text/plain")));
                     ctx.getChannel().write(nettyResponse);
                     ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedNioFile(file.getRealFile()));
-                    // Decide whether to close the connection or not.
-                     // Decide whether to close the connection or not.
-//                    boolean close =
-//                            HttpHeaders.Values.CLOSE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION)) ||
-//                                    nettyRequest.getProtocolVersion().equals(HttpVersion.HTTP_1_0) &&
-//                                            !HttpHeaders.Values.KEEP_ALIVE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION));
-//
-//                    if (close) {
+                    ///if (close) {
                         // Close the connection when the whole content is written out.
                         writeFuture.addListener(ChannelFutureListener.CLOSE);
-                   // }
+                    //}
                 }
 
             }
@@ -571,16 +585,16 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
     }
 
     public static boolean isModified(String etag, long last, Request request) {
-        if (request.headers.containsKey("If-None-Match")) {
-            final String browserEtag = request.headers.get("If-None-Match").value();
+        if (request.headers.containsKey(IF_NONE_MATCH)) {
+            final String browserEtag = request.headers.get(IF_NONE_MATCH).value();
             if (browserEtag.equals(etag)) {
                 return false;
             }
             return true;
         }
 
-        if (request.headers.containsKey("If-Modified-Since")) {
-            final String ifModifiedSince = request.headers.get("If-Modified-Since").value();
+        if (request.headers.containsKey(IF_MODIFIED_SINCE)) {
+            final String ifModifiedSince = request.headers.get(IF_MODIFIED_SINCE).value();
 
             if (!StringUtils.isEmpty(ifModifiedSince)) {
                 try {
@@ -597,33 +611,33 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         return true;
     }
 
-    private static void addEtag(Request request, HttpResponse minaResponse, File file) throws IOException {
+    private static void addEtag(Request request, HttpResponse httpResponse, File file) throws IOException {
         if (Play.mode == Play.Mode.DEV) {
-            minaResponse.setHeader("Cache-Control", "no-cache");
+            httpResponse.setHeader(CACHE_CONTROL, "no-cache");
         } else {
             String maxAge = Play.configuration.getProperty("http.cacheControl", "3600");
             if (maxAge.equals("0")) {
-                minaResponse.setHeader("Cache-Control", "no-cache");
+                httpResponse.setHeader(CACHE_CONTROL, "no-cache");
             } else {
-                minaResponse.setHeader("Cache-Control", "max-age=" + maxAge);
+                httpResponse.setHeader(CACHE_CONTROL, "max-age=" + maxAge);
             }
         }
         boolean useEtag = Play.configuration.getProperty("http.useETag", "true").equals("true");
         long last = file.lastModified();
         final String etag = "\"" + last + "-" + file.hashCode() + "\"";
         if (!isModified(etag, last, request)) {
-            minaResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.NOT_MODIFIED);
+            httpResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.NOT_MODIFIED);
             if (useEtag) {
-                minaResponse.setHeader("Etag", etag);
+                httpResponse.setHeader(ETAG, etag);
             }
 
         } else {
-            minaResponse.setHeader("Last-Modified", Utils.getHttpDateFormatter().format(new Date(last)));
+            httpResponse.setHeader(LAST_MODIFIED, Utils.getHttpDateFormatter().format(new Date(last)));
             if (useEtag) {
-                minaResponse.setHeader("Etag", etag);
+                httpResponse.setHeader(ETAG, etag);
             }
-            minaResponse.setHeader("Content-Type", MimeTypes.getContentType(file.getName()));
-            minaResponse.setHeader("Content-Length", "" + file.length());
+            httpResponse.setHeader(CONTENT_TYPE, MimeTypes.getContentType(file.getName()));
+            httpResponse.setHeader(CONTENT_LENGTH, String.valueOf(file.length()));
         }
     }
 

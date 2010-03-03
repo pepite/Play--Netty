@@ -314,4 +314,7 @@ public class FileChannelBuffer extends AbstractChannelBuffer implements WrappedC
           getBytes(0, out, length);
       }
 
+     public String toString(int q,int a,java.lang.String b) {
+            return null;
+     }
 }
