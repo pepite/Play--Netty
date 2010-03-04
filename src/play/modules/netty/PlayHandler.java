@@ -172,9 +172,9 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 nettyResponse.setHeader(entry.getKey(), value);
             }
         }
-        CookieEncoder encoder = new CookieEncoder(true);
         Map<String, Http.Cookie> cookies = response.cookies;
         for (Http.Cookie cookie : cookies.values()) {
+            CookieEncoder encoder = new CookieEncoder(true);
             Cookie c = new DefaultCookie(cookie.name, cookie.value);
             c.setSecure(cookie.secure);
             c.setPath(cookie.path);
@@ -185,8 +185,6 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 c.setMaxAge(cookie.maxAge);
             }
             encoder.addCookie(c);
-        }
-        if (!cookies.isEmpty()) {
             nettyResponse.addHeader(SET_COOKIE, encoder.encode());
         }
         if (!response.headers.containsKey(CACHE_CONTROL)) {
@@ -195,16 +193,13 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
 
     }
 
-    protected static void writeResponse(ChannelHandlerContext ctx, Response response, HttpResponse nettyResponse, HttpRequest nettyRequest, boolean close) throws IOException {
+    protected static void writeResponse(ChannelHandlerContext ctx, Response response, HttpResponse nettyResponse) throws IOException {
         byte[] content = response.out.toByteArray();
         ChannelBuffer buf = ChannelBuffers.copiedBuffer(content);
         nettyResponse.setContent(buf);
 
         ChannelFuture f = ctx.getChannel().write(nettyResponse);
-        //if (close) {
-            // Close the connection when the whole content is written out.
-            f.addListener(ChannelFutureListener.CLOSE);
-        //}
+        f.addListener(ChannelFutureListener.CLOSE);
 
     }
 
@@ -212,21 +207,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         response.out.flush();
 
         // Decide whether to close the connection or not.
-        boolean http10 = nettyRequest.getProtocolVersion().equals(HttpVersion.HTTP_1_0);
-        boolean close =
-                HttpHeaders.Values.CLOSE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION)) ||
-                        (http10 && !HttpHeaders.Values.KEEP_ALIVE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION)));
 
-        // Build the response object.
-//        org.jboss.netty.handler.codec.http.HttpResponse nettyResponse;
-//        if (http10) {
-//            nettyResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_0, HttpResponseStatus.valueOf(response.status));
-//            if (!close) {
-//                nettyResponse.addHeader(HttpHeaders.Names.CONNECTION, "Keep-Alive");
-//            }
-//        } else {
-//            nettyResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(response.status));
-//        }
         HttpResponse nettyResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(response.status));
         nettyResponse.setHeader(SERVER, signature);
 
@@ -253,24 +234,19 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 nettyResponse.setHeader(HttpHeaders.Names.CONTENT_LENGTH, String.valueOf(file.length()));
                 ctx.getChannel().write(nettyResponse);
                 ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedNioFile(file));
-                //if (close) {
+                if (!nettyResponse.isKeepAlive()) {
                     // Close the connection when the whole content is written out.
                     writeFuture.addListener(ChannelFutureListener.CLOSE);
-                //}
+                }
             } catch (Exception e) {
                 throw e;
             }
         } else if (is != null) {
             ctx.getChannel().write(nettyResponse);
             ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedStream(is));
-            //if (close) {
-                // Close the connection when the whole content is written out.
-                writeFuture.addListener(ChannelFutureListener.CLOSE);
-            //}
-
-
+            writeFuture.addListener(ChannelFutureListener.CLOSE);
         } else {
-            writeResponse(ctx, response, nettyResponse, nettyRequest, close);
+            writeResponse(ctx, response, nettyResponse);
         }
 
     }
@@ -298,7 +274,6 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         }
 
         ChannelBuffer b = nettyRequest.getContent();
-
         if (b instanceof FileChannelBuffer) {
             FileChannelBuffer buffer = (FileChannelBuffer) nettyRequest.getContent();
             // An error occured
@@ -363,10 +338,9 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
             request.headers.put(hd.name, hd);
         }
 
-        String value = nettyRequest.getHeader("Cookie");
+        String value = nettyRequest.getHeader(COOKIE);
         if (value != null) {
             Set<Cookie> cookies = new CookieDecoder().decode(value);
-
             if (cookies != null) {
                 for (Cookie cookie : cookies) {
                     Http.Cookie playCookie = new Http.Cookie();
@@ -452,9 +426,10 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
 
             // Flush some cookies
             try {
-                CookieEncoder encoder = new CookieEncoder(true);
+
                 Map<String, Http.Cookie> cookies = response.cookies;
                 for (Http.Cookie cookie : cookies.values()) {
+                    CookieEncoder encoder = new CookieEncoder(true);
                     Cookie c = new DefaultCookie(cookie.name, cookie.value);
                     c.setSecure(cookie.secure);
                     c.setPath(cookie.path);
@@ -465,8 +440,6 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                         c.setMaxAge(cookie.maxAge);
                     }
                     encoder.addCookie(c);
-                }
-                if (!cookies.isEmpty()) {
                     nettyResponse.addHeader(SET_COOKIE, encoder.encode());
                 }
                 //nettyResponse.setHeader("Cookie", encoder.encode());
@@ -520,24 +493,8 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
     }
 
     public static void serveStatic(RenderStatic renderStatic, ChannelHandlerContext ctx, Request request, Response response, HttpRequest nettyRequest) {
-        // Decide whether to close the connection or not.
-//               boolean http10 = nettyRequest.getProtocolVersion().equals(HttpVersion.HTTP_1_0);
-//               boolean close =
-//                       HttpHeaders.Values.CLOSE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION)) ||
-//                               (http10 && !HttpHeaders.Values.KEEP_ALIVE.equalsIgnoreCase(nettyRequest.getHeader(HttpHeaders.Names.CONNECTION)));
-
-               // Build the response object.
-//               org.jboss.netty.handler.codec.http.HttpResponse nettyResponse;
-//               if (http10) {
-//                   nettyResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_0, HttpResponseStatus.valueOf(response.status));
-//                   if (!close) {
-//                       nettyResponse.addHeader(HttpHeaders.Names.CONNECTION, "Keep-Alive");
-//                   }
-//               } else {
-//                   nettyResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(response.status));
-//               }
-               HttpResponse nettyResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(response.status));
-               nettyResponse.setHeader("Server", signature);
+        HttpResponse nettyResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.valueOf(response.status));
+        nettyResponse.setHeader("Server", signature);
         try {
             VirtualFile file = Play.getVirtualFile(renderStatic.file);
             if (file != null && file.exists() && file.isDirectory()) {
@@ -564,10 +521,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                     nettyResponse.setHeader(CONTENT_TYPE, (MimeTypes.getContentType(file.getName(), "text/plain")));
                     ctx.getChannel().write(nettyResponse);
                     ChannelFuture writeFuture = ctx.getChannel().write(new ChunkedNioFile(file.getRealFile()));
-                    ///if (close) {
-                        // Close the connection when the whole content is written out.
-                        writeFuture.addListener(ChannelFutureListener.CLOSE);
-                    //}
+                    writeFuture.addListener(ChannelFutureListener.CLOSE);
                 }
 
             }
