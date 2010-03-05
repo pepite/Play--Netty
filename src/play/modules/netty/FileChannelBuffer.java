@@ -150,6 +150,10 @@ public class FileChannelBuffer extends AbstractChannelBuffer implements WrappedC
         return out.write(bb);
     }
 
+    public void setByte(int i, int i1) {
+        throw new RuntimeException();
+    }
+
     public void getBytes(int index, OutputStream out, int length)
             throws IOException {
         byte[] b = new byte[length];
@@ -315,6 +319,10 @@ public class FileChannelBuffer extends AbstractChannelBuffer implements WrappedC
       }
 
      public String toString(int q,int a,java.lang.String b) {
-            return null;
+           throw new RuntimeException();
      }
+
+    public void setShort(int a,int b) {
+           throw new RuntimeException();
+    }
 }
