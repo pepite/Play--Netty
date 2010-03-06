@@ -176,12 +176,15 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                     error.append(response.cookies.get(Scope.COOKIE_PREFIX + "_ERRORS").value);
                 }
                 String errorData = URLEncoder.encode(error.toString(), "utf-8");
-                response.setCookie(Scope.COOKIE_PREFIX + "_ERRORS", errorData);
+                Http.Cookie c = new Http.Cookie();
+                c.value = errorData;
+                c.name = Scope.COOKIE_PREFIX + "_ERRORS";
+                response.cookies.put(Scope.COOKIE_PREFIX + "_ERRORS", c);
             } catch (Exception e) {
-                throw new UnexpectedException("Flash serialization problem", e);
+                throw new UnexpectedException("Error serialization problem", e);
             }
         }
-    }        
+    }
 
     protected static void addToResponse(Response response, HttpResponse nettyResponse) {
         Map<String, Http.Header> headers = response.headers;
@@ -301,7 +304,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
 
     public static Request parseRequest(ChannelHandlerContext ctx, HttpRequest nettyRequest) throws Exception {
         Logger.trace("parseRequest: begin");
-        int index =  nettyRequest.getUri().indexOf("?");
+        int index = nettyRequest.getUri().indexOf("?");
         String querystring = "";
         String path = URLDecoder.decode(nettyRequest.getUri(), "UTF-8");
         if (index != -1) {
