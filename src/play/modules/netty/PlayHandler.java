@@ -31,6 +31,7 @@ import play.vfs.VirtualFile;
 
 import java.io.*;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.text.ParseException;
 import java.util.*;
@@ -153,7 +154,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         public void execute() throws Exception {
             Logger.trace("execute: begin");
             ActionInvoker.invoke(request, response);
-            //saveExceededSizeError(nettyRequest, response);
+            saveExceededSizeError(nettyRequest, response);
             copyResponse(ctx, request, response, nettyRequest);
             Logger.trace("execute: end");
         }
@@ -180,7 +181,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 throw new UnexpectedException("Flash serialization problem", e);
             }
         }
-    }        // Thread
+    }        
 
     protected static void addToResponse(Response response, HttpResponse nettyResponse) {
         Map<String, Http.Header> headers = response.headers;
@@ -298,21 +299,21 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         Logger.trace("copyResponse: end");
     }
 
-    private static String escapeIllegalCharacters(String uri) throws Exception {
-        // Encode uri according to RFC 2396
-        return URLEncoder.encode(uri, "US-ASCII").replaceAll("%2F", "/").replaceAll("%3F", "?").replaceAll("%3D", "=").replaceAll("%26", "&");
-    }
-
     public static Request parseRequest(ChannelHandlerContext ctx, HttpRequest nettyRequest) throws Exception {
         Logger.trace("parseRequest: begin");
-        final URI uri = new URI(escapeIllegalCharacters(nettyRequest.getUri()));
+        int index =  nettyRequest.getUri().indexOf("?");
+        String querystring = "";
+        String path = URLDecoder.decode(nettyRequest.getUri(), "UTF-8");
+        if (index != -1) {
+            path = URLDecoder.decode(nettyRequest.getUri().substring(0, index), "UTF-8");
+            querystring = nettyRequest.getUri().substring(index + 1);
+        }
 
         final Request request = new Request();
         request.remoteAddress = ctx.getChannel().getRemoteAddress().toString();
         request.method = nettyRequest.getMethod().getName();
-        request.path = uri.getPath();
-        request.querystring = uri.getQuery() == null ? "" : uri.getQuery();
-
+        request.path = path;
+        request.querystring = querystring;
         final String contentType = nettyRequest.getHeader(CONTENT_TYPE);
         if (contentType != null) {
             request.contentType = contentType.split(";")[0].trim().toLowerCase();
@@ -335,7 +336,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
             request.body = new ChannelBufferInputStream(b);
         }
 
-        request.url = uri.toASCIIString();
+        request.url = nettyRequest.getUri();
         request.host = nettyRequest.getHeader(HOST);
 
         if (request.host.contains(":")) {
@@ -406,7 +407,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, ExceptionEvent e)
             throws Exception {
-        e.getCause().printStackTrace();
+        //e.getCause().printStackTrace();
         e.getChannel().close();
     }
 
@@ -591,25 +592,8 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                     ch.write(nettyResponse);
 
                     // Write the content.
-                    ChannelFuture writeFuture;
+                    ChannelFuture writeFuture = ch.write(new ChunkedFile(raf, 0, fileLength, 8192));
 
-                    writeFuture = ch.write(new ChunkedFile(raf, 0, fileLength, 8192));
-//
-//                        // No encryption - use zero-copy.
-//                        final FileRegion region =
-//                                new DefaultFileRegion(raf.getChannel(), 0, fileLength);
-//                        writeFuture = ch.write(region);
-//                        writeFuture.addListener(new ChannelFutureProgressListener() {
-//                            public void operationComplete(ChannelFuture future) {
-//                                region.releaseExternalResources();
-//                            }
-//
-//                            public void operationProgressed(
-//                                    ChannelFuture future, long amount, long current, long total) {
-//                                System.out.printf("%s: %d / %d (+%d)%n", localFile.getPath(), current, total, amount);
-//
-//                            }
-//                        });
                     if (!isKeepAlive(nettyRequest)) {
                         // Close the connection when the whole content is written out.
                         writeFuture.addListener(ChannelFutureListener.CLOSE);
