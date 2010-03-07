@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="Nettyg module" default="build" basedir=".">
+<project name="Netty module" default="build" basedir=".">
 
     <property file="./build.properties" />
 
