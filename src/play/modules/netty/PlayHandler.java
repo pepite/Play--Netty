@@ -332,6 +332,10 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
             request.contentType = "text/html";
         }
 
+        if (nettyRequest.getHeader("X-HTTP-Method-Override") != null) {
+            request.method = nettyRequest.getHeader("X-HTTP-Method-Override").intern();
+        }
+
         ChannelBuffer b = nettyRequest.getContent();
         if (b instanceof FileChannelBuffer) {
             FileChannelBuffer buffer = (FileChannelBuffer) nettyRequest.getContent();
@@ -339,7 +343,6 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
             Integer max = Integer.valueOf(Play.configuration.getProperty("play.module.netty.maxContentLength", "-1"));
             if (max == -1 || buffer.getInputStream().available() < max) {
                 request.body = buffer.getInputStream();
-            } else {
                 request.body = new ByteArrayInputStream(new byte[0]);
             }
 
