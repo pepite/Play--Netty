@@ -229,7 +229,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         ChannelBuffer buf = ChannelBuffers.copiedBuffer(content);
         nettyResponse.setContent(buf);
         //if (keepAlive) {
-        setContentLength(nettyResponse, nettyResponse.getContent().readableBytes());
+        setContentLength(nettyResponse, response.out.size());
         //}
         ChannelFuture f = ctx.getChannel().write(nettyResponse);
 
