@@ -343,6 +343,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
             Integer max = Integer.valueOf(Play.configuration.getProperty("play.module.netty.maxContentLength", "-1"));
             if (max == -1 || buffer.getInputStream().available() < max) {
                 request.body = buffer.getInputStream();
+            } else {
                 request.body = new ByteArrayInputStream(new byte[0]);
             }
 
