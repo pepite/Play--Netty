@@ -1,5 +1,30 @@
+/**
+ *
+ * Copyright 2010, Nicolas Leroux.
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation; either version 2.1 of
+ * the License, or (at your option) any later version.
+ *
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this software; if not, write to the Free
+ * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+ * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
+ *
+ * User: nicolas
+ * Date: Feb 25, 2010
+ *
+ */
+
 package play.modules.netty;
 
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBufferInputStream;
@@ -12,7 +37,7 @@ import play.Invoker;
 import play.Logger;
 import play.Play;
 import play.PlayPlugin;
-import play.data.validation.Validation;
+
 import play.exceptions.PlayException;
 import play.exceptions.UnexpectedException;
 import play.i18n.Messages;
@@ -35,17 +60,13 @@ import java.net.URLEncoder;
 import java.text.ParseException;
 import java.util.*;
 
+import play.data.validation.Validation;
 import static org.jboss.netty.handler.codec.http.HttpHeaders.Names.*;
 
 
-@ChannelPipelineCoverage("one")
 public class PlayHandler extends SimpleChannelUpstreamHandler {
 
     private final static String signature = "Play! Framework;" + Play.version + ";" + Play.mode.name().toLowerCase();
-
-    private HttpRequest originalRequest;
-    private boolean readingChunks;
-
 
     @Override
     public void messageReceived(ChannelHandlerContext ctx, MessageEvent e) throws Exception {
@@ -80,9 +101,9 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         Logger.trace("messageReceived: end");
     }
 
-    private static Map<String, RenderStatic> staticPathsCache = new HashMap();
+    private static Map<String, RenderStatic> staticPathsCache = new HashMap<String, RenderStatic>();
 
-    public class NettyInvocation extends Invoker.DirectInvocation {
+    public class NettyInvocation extends Invoker.Invocation {
 
 
         private final ChannelHandlerContext ctx;
@@ -143,7 +164,6 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 Logger.trace("run: begin");
                 super.run();
             } catch (Exception e) {
-                e.printStackTrace();
                 serve500(e, ctx, nettyRequest);
             }
             Logger.trace("run: end");
@@ -216,7 +236,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
 
     }
 
-    protected static void writeResponse(ChannelHandlerContext ctx, Response response, HttpResponse nettyResponse, HttpRequest nettyRequest) throws IOException {
+    protected static void writeResponse(ChannelHandlerContext ctx, Response response, HttpResponse nettyResponse, HttpRequest nettyRequest) {
         byte[] content = null;
 
         final boolean keepAlive = isKeepAlive(nettyRequest);
@@ -228,6 +248,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
 
         ChannelBuffer buf = ChannelBuffers.copiedBuffer(content);
         nettyResponse.setContent(buf);
+        setContentLength(nettyResponse, response.out.size());
         if (keepAlive) {
             setContentLength(nettyResponse, response.out.size());
         }
@@ -270,11 +291,10 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         if (file != null && file.isFile()) {
             try {
 
-                addEtag(request, nettyResponse, file);
+                nettyResponse = addEtag(request, nettyResponse, file);
 
-                nettyResponse.setHeader(CONTENT_TYPE, (MimeTypes.getContentType(file.getName(), "text/plain")));
-                RandomAccessFile raf;
-                raf = new RandomAccessFile(file, "r");
+                nettyResponse.setHeader(CONTENT_TYPE, MimeTypes.getContentType(file.getName(), "text/plain"));
+                RandomAccessFile raf = new RandomAccessFile(file, "r");
                 long fileLength = raf.length();
 
                 Logger.trace("file length is [" + fileLength + "]");
@@ -312,6 +332,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
 
     public static Request parseRequest(ChannelHandlerContext ctx, HttpRequest nettyRequest) throws Exception {
         Logger.trace("parseRequest: begin");
+        Logger.trace("parseRequest: URI = " + nettyRequest.getUri());
         int index = nettyRequest.getUri().indexOf("?");
         String querystring = "";
         String path = URLDecoder.decode(nettyRequest.getUri(), "UTF-8");
@@ -338,17 +359,20 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
 
         ChannelBuffer b = nettyRequest.getContent();
         if (b instanceof FileChannelBuffer) {
-            FileChannelBuffer buffer = (FileChannelBuffer) nettyRequest.getContent();
-            // An error occured
-            Integer max = Integer.valueOf(Play.configuration.getProperty("play.module.netty.maxContentLength", "-1"));
-            if (max == -1 || buffer.getInputStream().available() < max) {
-                request.body = buffer.getInputStream();
-            } else {
+            FileChannelBuffer buffer = (FileChannelBuffer) b;
+            // An error occurred
+            Integer max = Integer.valueOf(Play.configuration.getProperty("play.netty.maxContentLength", "-1"));
+
+            request.body = buffer.getInputStream();
+            if (!(max == -1 || request.body.available() < max)) {
                 request.body = new ByteArrayInputStream(new byte[0]);
             }
 
         } else {
-            request.body = new ChannelBufferInputStream(b);
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            IOUtils.copy(new ChannelBufferInputStream(b), out);
+            byte[] n = out.toByteArray();
+            request.body = new ByteArrayInputStream(n);
         }
 
         request.url = nettyRequest.getUri();
@@ -469,7 +493,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         try {
             binding.put("errors", Validation.errors());
         } catch (Exception ex) {
-            Logger.error(ex, "Error when getting Validation errors");
+            //Logger.error(ex, "Error when getting Validation errors");
         }
 
         return binding;
@@ -585,7 +609,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 } else {
                     final File localFile = file.getRealFile();
                     final boolean keepAlive = isKeepAlive(nettyRequest);
-                    addEtag(request, nettyResponse, localFile);
+                    nettyResponse = addEtag(request, nettyResponse, localFile);
 
                     RandomAccessFile raf;
                     raf = new RandomAccessFile(localFile, "r");
@@ -656,7 +680,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         return true;
     }
 
-    private static void addEtag(Request request, HttpResponse httpResponse, File file) throws IOException {
+    private static HttpResponse addEtag(Request request, HttpResponse httpResponse, File file) {
         if (Play.mode == Play.Mode.DEV) {
             httpResponse.setHeader(CACHE_CONTROL, "no-cache");
         } else {
@@ -671,7 +695,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         long last = file.lastModified();
         final String etag = "\"" + last + "-" + file.hashCode() + "\"";
         if (!isModified(etag, last, request)) {
-            httpResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.NOT_MODIFIED);
+            httpResponse.setStatus(HttpResponseStatus.NOT_MODIFIED);
             if (useEtag) {
                 httpResponse.setHeader(ETAG, etag);
             }
@@ -682,6 +706,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 httpResponse.setHeader(ETAG, etag);
             }
         }
+        return httpResponse;
     }
 
     public static boolean isKeepAlive(HttpMessage message) {

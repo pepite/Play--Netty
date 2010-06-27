@@ -1,22 +1,22 @@
-    /**
-     *
-     * Copyright 2010, Lunatech Labs.
-     *
-     * This is free software; you can redistribute it and/or modify it
-     * under the terms of the GNU Lesser General Public License as
-     * published by the Free Software Foundation; either version 2.1 of
-     * the License, or (at your option) any later version.
-     *
-     * This software is distributed in the hope that it will be useful,
-     * but WITHOUT ANY WARRANTY; without even the implied warranty of
-     * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-     * Lesser General Public License for more details.
-     *
-     * You should have received a copy of the GNU Lesser General Public
-     * License along with this software; if not, write to the Free
-     * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
-     * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
-     *
+/**
+ *
+ * Copyright 2010, Nicolas Leroux.
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation; either version 2.1 of
+ * the License, or (at your option) any later version.
+ *
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this software; if not, write to the Free
+ * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+ * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
+ *
  * User: nicolas
  * Date: Feb 25, 2010
  *
@@ -25,7 +25,6 @@ package play.modules.netty;
 
 
 import org.jboss.netty.buffer.*;
-import play.Logger;
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -49,7 +48,7 @@ public class FileChannelBuffer extends AbstractChannelBuffer implements WrappedC
         }
         try {
             this.file = file;
-            this.is = new TemporyFileInputStream(file);
+            this.is = new FileInputStream(file);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -141,7 +140,6 @@ public class FileChannelBuffer extends AbstractChannelBuffer implements WrappedC
     }
 
 
-
     public int getBytes(int index, GatheringByteChannel out, int length)
             throws IOException {
         byte[] b = new byte[length];
@@ -211,7 +209,7 @@ public class FileChannelBuffer extends AbstractChannelBuffer implements WrappedC
 //        } catch (IOException e) {
 //            throw new RuntimeException(e);
 //        }
-         throw new RuntimeException();
+        throw new RuntimeException();
     }
 
     public short getShort(int index) {
@@ -260,69 +258,69 @@ public class FileChannelBuffer extends AbstractChannelBuffer implements WrappedC
 //          ChannelBuffer buf = ChannelBuffers.buffer(length);
 //          getBytes(0, buf);
 //          return buf;
-         throw new RuntimeException();
-      }
+        throw new RuntimeException();
+    }
 
-      public ChannelBuffer readBytes(ChannelBufferIndexFinder endIndexFinder) {
-          throw new RuntimeException();
-      }
+    public ChannelBuffer readBytes(ChannelBufferIndexFinder endIndexFinder) {
+        throw new RuntimeException();
+    }
 
-      public ChannelBuffer readSlice(int length) {
-          throw new RuntimeException();
-      }
+    public ChannelBuffer readSlice(int length) {
+        throw new RuntimeException();
+    }
 
-      public ChannelBuffer readSlice(ChannelBufferIndexFinder endIndexFinder) {
-         throw new RuntimeException();
-      }
+    public ChannelBuffer readSlice(ChannelBufferIndexFinder endIndexFinder) {
+        throw new RuntimeException();
+    }
 
-      public void readBytes(byte[] dst, int dstIndex, int length) {
-          checkReadableBytes(length);
-          getBytes(0, dst, dstIndex, length);
-      }
+    public void readBytes(byte[] dst, int dstIndex, int length) {
+        checkReadableBytes(length);
+        getBytes(0, dst, dstIndex, length);
+    }
 
-      public void readBytes(byte[] dst) {
-          readBytes(dst, 0, dst.length);
-      }
+    public void readBytes(byte[] dst) {
+        readBytes(dst, 0, dst.length);
+    }
 
-      public void readBytes(ChannelBuffer dst) {
-          readBytes(dst, dst.writableBytes());
-      }
+    public void readBytes(ChannelBuffer dst) {
+        readBytes(dst, dst.writableBytes());
+    }
 
-      public void readBytes(ChannelBuffer dst, int length) {
-          if (length > dst.writableBytes()) {
-              throw new IndexOutOfBoundsException();
-          }
-          readBytes(dst, dst.writerIndex(), length);
-          dst.writerIndex(dst.writerIndex() + length);
-      }
+    public void readBytes(ChannelBuffer dst, int length) {
+        if (length > dst.writableBytes()) {
+            throw new IndexOutOfBoundsException();
+        }
+        readBytes(dst, dst.writerIndex(), length);
+        dst.writerIndex(dst.writerIndex() + length);
+    }
 
-      public void readBytes(ChannelBuffer dst, int dstIndex, int length) {
-          getBytes(0, dst, dstIndex, length);
-      }
+    public void readBytes(ChannelBuffer dst, int dstIndex, int length) {
+        getBytes(0, dst, dstIndex, length);
+    }
 
-      public void readBytes(ByteBuffer dst) {
-          int length = dst.remaining();
-          checkReadableBytes(length);
-          getBytes(0, dst);
-      }
+    public void readBytes(ByteBuffer dst) {
+        int length = dst.remaining();
+        checkReadableBytes(length);
+        getBytes(0, dst);
+    }
 
-      public int readBytes(GatheringByteChannel out, int length)
-              throws IOException {
-          checkReadableBytes(length);
-          int readBytes = getBytes(0, out, length);
-          return readBytes;
-      }
+    public int readBytes(GatheringByteChannel out, int length)
+            throws IOException {
+        checkReadableBytes(length);
+        int readBytes = getBytes(0, out, length);
+        return readBytes;
+    }
 
-      public void readBytes(OutputStream out, int length) throws IOException {
-          checkReadableBytes(length);
-          getBytes(0, out, length);
-      }
+    public void readBytes(OutputStream out, int length) throws IOException {
+        checkReadableBytes(length);
+        getBytes(0, out, length);
+    }
 
-     public String toString(int q,int a,java.lang.String b) {
-           throw new RuntimeException();
-     }
+    public String toString(int q, int a, java.lang.String b) {
+        throw new RuntimeException();
+    }
 
-    public void setShort(int a,int b) {
-           throw new RuntimeException();
+    public void setShort(int a, int b) {
+        throw new RuntimeException();
     }
 }
