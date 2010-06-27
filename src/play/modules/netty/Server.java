@@ -60,7 +60,7 @@ public class Server {
 
         // Setup the http server for netty
         ServerBootstrap bootstrap = new ServerBootstrap(new NioServerSocketChannelFactory(
-                    Executors.newCachedThreadPool(), Executors.newCachedThreadPool()));
+                Executors.newCachedThreadPool(), Executors.newCachedThreadPool()));
 
         bootstrap.setPipelineFactory(new HttpServerPipelineFactory());
         bootstrap.bind(new InetSocketAddress(address, httpPort));

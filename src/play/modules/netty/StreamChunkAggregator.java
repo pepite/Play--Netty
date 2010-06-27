@@ -64,10 +64,10 @@ public class StreamChunkAggregator extends SimpleChannelUpstreamHandler {
             return;
         }
 
-
         HttpMessage currentMessage = this.currentMessage;
         File localFile = this.file;
         if (currentMessage == null) {
+
             HttpMessage m = (HttpMessage) msg;
             if (m.isChunked()) {
                 final String localName = UUID.randomUUID().toString();
@@ -79,6 +79,7 @@ public class StreamChunkAggregator extends SimpleChannelUpstreamHandler {
                 if (encodings.isEmpty()) {
                     m.removeHeader(HttpHeaders.Names.TRANSFER_ENCODING);
                 }
+
                 this.currentMessage = m;
                 this.file = new File(Play.tmpDir, localName);
                 this.out = new FileOutputStream(file, true);
@@ -104,7 +105,7 @@ public class StreamChunkAggregator extends SimpleChannelUpstreamHandler {
                             HttpHeaders.Names.CONTENT_LENGTH,
                             String.valueOf(localFile.length()));
 
-                    currentMessage.setContent(new play.server.FileChannelBuffer(localFile));
+                    currentMessage.setContent(new FileChannelBuffer(localFile));
                     this.out = null;
                     this.currentMessage = null;
                     this.file = null;

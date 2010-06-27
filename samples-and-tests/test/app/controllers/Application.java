@@ -15,7 +15,7 @@ public class Application extends Controller {
 
     public static void upload(File file) throws Exception {
         Logger.info("File is " + file.getAbsolutePath() + "]");
-        FileUtils.copyFile(file, new File(Play.getFile("data/"), file.getName()));
+        FileUtils.copyFile(file, new File(Play.getFile("/data/"), file.getName()));
         Logger.info("File size [" + file.length() + "]");
     }
 
