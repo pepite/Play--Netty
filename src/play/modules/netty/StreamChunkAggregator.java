@@ -93,7 +93,7 @@ public class StreamChunkAggregator extends SimpleChannelUpstreamHandler {
             final HttpChunk chunk = (HttpChunk) msg;
             if (maxContentLength != -1 && (localFile.length() > (maxContentLength - chunk.getContent().readableBytes()))) {
                 currentMessage.setHeader(
-                        HttpHeaders.Names.WARNING, "play.netty.content.length.exceeded");
+                        HttpHeaders.Names.WARNING, "play.module.netty.content.length.exceeded");
             } else {
                 IOUtils.copyLarge(new ChannelBufferInputStream(chunk.getContent()), this.out);
 

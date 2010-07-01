@@ -188,9 +188,9 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
             try {
                 StringBuilder error = new StringBuilder();
                 error.append("\u0000");
-				// Cannot put warning which is play.netty.content.length.exceeded 
+				// Cannot put warning which is play.module.netty.content.length.exceeded 
 				// as Key as it will result error when printing error
-                error.append("play.netty.maxContentLength");
+                error.append("play.module.netty.maxContentLength");
                 error.append(":");
 				String size = null;
 				try {
@@ -372,7 +372,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         if (b instanceof FileChannelBuffer) {
             FileChannelBuffer buffer = (FileChannelBuffer) b;
             // An error occurred
-            Integer max = Integer.valueOf(Play.configuration.getProperty("play.netty.maxContentLength", "-1"));
+            Integer max = Integer.valueOf(Play.configuration.getProperty("play.module.netty.maxContentLength", "-1"));
 
             request.body = buffer.getInputStream();
             if (!(max == -1 || request.body.available() < max)) {
