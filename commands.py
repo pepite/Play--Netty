@@ -33,6 +33,60 @@ if play_command == ('netty:test'):
     subprocess.call(java_cmd, env=os.environ)
     print
     sys.exit(0)
+if play_command == 'netty:start':
+	force = False
+	for a in remaining_args:
+		if a.find('--force') == 0:
+			force = True
+			remaining_args.remove(a)
+	check_application()
+	load_modules(not force)
+	do_classpath()
+	do_java('play.modules.netty.Server')
+	if os.path.exists(pid_path):
+		print "~ Oops. %s is already started! (or delete %s)" %
+(os.path.normpath(application_path), os.path.normpath(pid_path))
+		print "~"
+		sys.exit(1)
+
+	sysout = readConf('application.log.system.out')
+	sysout = sysout!='false' and sysout!='off'
+	if not sysout:
+	  sout = None
+	else:
+	  sout = open(os.path.join(log_path, 'system.out'), 'w')
+	try:
+		pid = subprocess.Popen(java_cmd, stdout=sout, env=os.environ).pid
+	except OSError:
+		print "Could not execute the java executable, please make sure the
+JAVA_HOME environment variable is set properly (the java executable
+should reside at JAVA_HOME/bin/java). "
+		sys.exit(-1)
+	print "~ OK, %s is started" % os.path.normpath(application_path)
+	if sysout:
+	  print "~ output is redirected to %s" %
+os.path.normpath(os.path.join(log_path, 'system.out'))
+	pid_file = open(pid_path, 'w')
+	pid_file.write(str(pid))
+	print "~ pid is %s" % pid
+	print "~"
+	sys.exit(0)
+if play_command == 'netty:stop':
+	check_application()
+	load_modules()
+	do_classpath()
+	do_java('play.modules.netty.Server')
+	if not os.path.exists(pid_path):
+		print "~ Oops! %s is not started (server.pid not found)" %
+os.path.normpath(application_path)
+		print "~"
+		sys.exit(-1)
+	pid = open(pid_path).readline().strip()
+	os.remove(pid_path)
+	kill(pid)
+	print "~ OK, %s is stopped" % application_path
+	print "~"
+	sys.exit(0)
 if play_command == 'netty:auto-test':
     play_id = 'test'
     check_application()
