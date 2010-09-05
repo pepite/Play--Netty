@@ -182,8 +182,9 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 }
                 return;
             }
-            ActionInvoker.invoke(request, response);
+           // Check the exceeded size before re rendering so we can render the error if the size is exceeded
             saveExceededSizeError(nettyRequest, request, response);
+            ActionInvoker.invoke(request, response);
             copyResponse(ctx, request, response, nettyRequest);
             Logger.trace("execute: end");
         }
@@ -769,7 +770,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
     }
 
     public static boolean isKeepAlive(HttpMessage message) {
-        return HttpHeaders.isKeepAlive(message);
+        return HttpHeaders.isKeepAlive(message) && message.getProtocolVersion().equals(HttpVersion.HTTP_1_1);
     }
 
     public static void setContentLength(HttpMessage message, long contentLength) {
